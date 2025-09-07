@@ -1,6 +1,6 @@
 import 'package:app_da_poli/views/avisos_view.dart';
 import 'package:app_da_poli/views/eventos_view.dart';
-import 'package:app_da_poli/views/grade_view.dart';
+import 'package:app_da_poli/views/jupiter_view.dart.dart';
 import 'package:app_da_poli/views/profile_view.dart';
 import 'package:app_da_poli/views/tarefas_view.dart';
 import 'package:flutter/material.dart';
@@ -20,7 +20,7 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
   static final List<Widget> _widgetOptions = <Widget>[
-    const GradeView(),
+    const JupiterView(),
     const AvisosView(),
     const TarefasView(),
     const EventosView(),
