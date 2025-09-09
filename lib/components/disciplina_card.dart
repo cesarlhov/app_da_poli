@@ -1,9 +1,8 @@
+// lib/components/disciplina_card.dart
+
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:flutter/material.dart';
 
-//-------------------------------------------------
-// COMPONENTE PARA EXIBIR UMA DISCIPLINA NA GRADE
-//-------------------------------------------------
 class DisciplinaCard extends StatelessWidget {
   final Disciplina disciplina;
   final VoidCallback onTap;
@@ -16,38 +15,34 @@ class DisciplinaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    final characters = disciplina.codigo.split('');
+
+    return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(4.0),
+        width: double.infinity,
         decoration: BoxDecoration(
-          color: const Color(0xFF003366).withOpacity(0.8),
-          borderRadius: BorderRadius.circular(4),
+          color: disciplina.cor,
+          borderRadius: BorderRadius.circular(100.0),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              disciplina.nome,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 10,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
+        // --- MUDANÇA: Usando FittedBox para garantir que o texto sempre caiba ---
+        child: FittedBox(
+          fit: BoxFit.contain, // Encolhe o conteúdo para caber
+          child: Padding(
+            // Adiciona um pequeno respiro interno
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: characters.map((char) => Text(
+                char,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12, // O tamanho da fonte agora é uma referência
+                ),
+              )).toList(),
             ),
-            const SizedBox(height: 2),
-            Text(
-              disciplina.codigo,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 8,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

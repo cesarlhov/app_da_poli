@@ -1,3 +1,5 @@
+// lib/models/tarefa_model.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Este ficheiro define a estrutura de dados para uma Tarefa.
@@ -14,11 +16,10 @@ class Tarefa {
     required this.concluida,
   });
 
-  // Factory constructor para criar uma Tarefa a partir de um documento do Firestore
-  factory Tarefa.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+  // --- MUDANÇA: Renomeado de fromFirestore para fromMap e parâmetros atualizados ---
+  factory Tarefa.fromMap(String id, Map<String, dynamic> data) {
     return Tarefa(
-      id: doc.id,
+      id: id,
       titulo: data['titulo'] ?? '',
       dataEntrega: data['dataEntrega'] ?? Timestamp.now(),
       concluida: data['concluida'] ?? false,

@@ -1,6 +1,6 @@
 import 'package:app_da_poli/views/avisos_view.dart';
 import 'package:app_da_poli/views/eventos_view.dart';
-import 'package:app_da_poli/views/jupiter_view.dart.dart';
+import 'package:app_da_poli/views/jupiter_view.dart';
 import 'package:app_da_poli/views/profile_view.dart';
 import 'package:app_da_poli/views/tarefas_view.dart';
 import 'package:flutter/material.dart';

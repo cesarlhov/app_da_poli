@@ -1,31 +1,31 @@
+// lib/models/user_model.dart
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Este ficheiro define a estrutura de dados para o perfil de um utilizador.
 class AppUser {
   final String uid;
   final String nome;
   final String email;
   final String curso;
-  final String nusp; // <-- 1. Adicionado o campo que faltava
+  final String nusp;
 
   AppUser({
     required this.uid,
     required this.nome,
     required this.email,
     required this.curso,
-    required this.nusp, // <-- 2. Adicionado ao construtor
+    required this.nusp,
   });
 
-  // Factory constructor para criar um AppUser a partir de um documento do Firestore
-  factory AppUser.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+  // --- MUDANÇA: Renomeado de fromFirestore para fromMap ---
+  // Agora ele segue o mesmo padrão do nosso Disciplina model.
+  factory AppUser.fromMap(String id, Map<String, dynamic> data) {
     return AppUser(
-      uid: doc.id,
+      uid: id, // Usamos o id do documento como uid
       nome: data['nome'] ?? '',
       email: data['email'] ?? '',
       curso: data['curso'] ?? 'Não definido',
-      nusp: data['nusp'] ?? '', // <-- 3. Adicionado o leitor do Firestore
+      nusp: data['nusp'] ?? '',
     );
   }
 }
-

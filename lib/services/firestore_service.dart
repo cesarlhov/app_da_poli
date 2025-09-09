@@ -1,3 +1,5 @@
+// lib/services/firestore_service.dart
+
 import 'package:app_da_poli/models/aviso_model.dart';
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/models/tarefa_model.dart';
@@ -9,80 +11,83 @@ class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // --- MÉTODOS DE UTILIZADOR ---
-  
-  // <<< MÉTODO ATUALIZADO ABAIXO >>>
-  // Cria o documento de dados do perfil para um novo utilizador
+  // --- MÉTODOS DE USUÁRIO ---
+
   Future<void> createUserProfile(User user, String nome, String curso, String nusp) async {
     final docRef = _db.collection('users').doc(user.uid);
     final data = {
       'nome': nome,
       'email': user.email,
       'curso': curso,
-      'nusp': nusp, // <-- Adicionado o N.º USP
+      'nusp': nusp,
       'uid': user.uid,
       'criadoEm': Timestamp.now(),
     };
     await docRef.set(data);
   }
 
-  // Obtém os dados do perfil do utilizador logado
   Stream<AppUser?> getUserProfile() {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(null);
     final docRef = _db.collection('users').doc(user.uid);
-    return docRef.snapshots().map((doc) => doc.exists ? AppUser.fromFirestore(doc) : null);
+    return docRef.snapshots().map((doc) =>
+        doc.exists ? AppUser.fromMap(doc.id, doc.data()!) : null);
+  }
+
+  Future<AppUser?> getUserProfileOnce() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    final docRef = _db.collection('users').doc(user.uid);
+    final docSnapshot = await docRef.get();
+    return docSnapshot.exists ? AppUser.fromMap(docSnapshot.id, docSnapshot.data()!) : null;
   }
 
   // --- MÉTODOS DE DISCIPLINA ---
-  Future<void> addDisciplina(Disciplina disciplina) async {
+
+  Future<void> addDisciplina(Map<String, dynamic> disciplinaData) async {
     final user = _auth.currentUser;
     if (user == null) return;
-    final collectionRef =
-        _db.collection('users').doc(user.uid).collection('disciplinas');
-    final data = {
-      'nome': disciplina.nome,
-      'codigo': disciplina.codigo,
-      'professor': disciplina.professor,
-      'sala': disciplina.sala,
-      'diasDaSemana': disciplina.diasDaSemana,
-      'horarioInicio': disciplina.horarioInicio,
-      'horarioFim': disciplina.horarioFim,
-    };
-    await collectionRef.add(data);
+    final collectionRef = _db.collection('users').doc(user.uid).collection('disciplinas');
+    await collectionRef.add(disciplinaData);
   }
 
   Stream<List<Disciplina>> getDisciplinas() {
     final user = _auth.currentUser;
     if (user == null) return Stream.value([]);
-    final collectionRef =
-        _db.collection('users').doc(user.uid).collection('disciplinas');
+    final collectionRef = _db.collection('users').doc(user.uid).collection('disciplinas');
     return collectionRef
         .snapshots()
-        .map((s) => s.docs.map((d) => Disciplina.fromFirestore(d)).toList());
+        .map((snapshot) => snapshot.docs.map((doc) => 
+            Disciplina.fromMap(doc.id, doc.data())
+        ).toList());
+  }
+  
+  Future<List<Disciplina>> getDisciplinasOnce() async {
+    final user = _auth.currentUser;
+    if (user == null) return [];
+    final collectionRef = _db.collection('users').doc(user.uid).collection('disciplinas');
+    final snapshot = await collectionRef.get();
+    return snapshot.docs.map((doc) => Disciplina.fromMap(doc.id, doc.data())).toList();
   }
 
   Future<void> deleteDisciplina(String disciplinaId) async {
     final user = _auth.currentUser;
     if (user == null) return;
-    final docRef = _db
-        .collection('users')
-        .doc(user.uid)
-        .collection('disciplinas')
-        .doc(disciplinaId);
+    final docRef = _db.collection('users').doc(user.uid).collection('disciplinas').doc(disciplinaId);
     await docRef.delete();
   }
 
-  // --- MÉTODOS DE AVISOS ---
+  // --- MÉTODOS DE AVISOS (RESTAURADOS) ---
   Stream<List<Aviso>> getAvisos() {
     final collectionRef =
         _db.collection('avisos').orderBy('data', descending: true);
+    // Assumindo que seu Aviso model também tem um construtor fromMap
     return collectionRef
         .snapshots()
-        .map((s) => s.docs.map((d) => Aviso.fromFirestore(d)).toList());
+        .map((s) => s.docs.map((d) => Aviso.fromMap(d.id, d.data())).toList());
   }
 
-  // --- MÉTODOS DE TAREFAS ---
+  // --- MÉTODOS DE TAREFAS (RESTAURADOS) ---
   Stream<List<Tarefa>> getTarefas() {
     final user = _auth.currentUser;
     if (user == null) return Stream.value([]);
@@ -91,9 +96,10 @@ class FirestoreService {
         .doc(user.uid)
         .collection('tarefas')
         .orderBy('dataEntrega');
+    // Assumindo que seu Tarefa model também tem um construtor fromMap
     return collectionRef
         .snapshots()
-        .map((s) => s.docs.map((d) => Tarefa.fromFirestore(d)).toList());
+        .map((s) => s.docs.map((d) => Tarefa.fromMap(d.id, d.data())).toList());
   }
 
   Future<void> addTarefa(String titulo, DateTime dataEntrega) async {
@@ -120,4 +126,3 @@ class FirestoreService {
     await docRef.update({'concluida': concluida});
   }
 }
-

@@ -1,5 +1,4 @@
 import 'package:app_da_poli/components/weekday_selector.dart';
-import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 
@@ -34,44 +33,33 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
   TimeOfDay? _horarioInicio;
   TimeOfDay? _horarioFim;
 
-  // Instância do nosso serviço de Firestore
   final FirestoreService _firestoreService = FirestoreService();
 
-  // Lista de disciplinas para o autocompletar
   static final List<DisciplinaPreCadastrada> _disciplinasSugeridas = [
-    DisciplinaPreCadastrada('Cálculo Numérico', 'PME3380', 'Prof. Dr. Fulano'),
-    DisciplinaPreCadastrada('Circuitos Elétricos', 'PEA3301', 'Prof. Dr. Ciclano'),
-    DisciplinaPreCadastrada('Física III', 'PBI3345', 'Prof. Dr. Beltrano'),
+    // ... sua lista de sugestões ...
   ];
 
   void _salvarDisciplina() async {
-    // Validação adicional para os horários
     if (_horarioInicio == null || _horarioFim == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor, selecione os horários de início e fim.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      // ... sua validação de horário ...
       return;
     }
 
     if (_formKey.currentState!.validate()) {
-      // Cria o objeto Disciplina com os dados do formulário
-      final novaDisciplina = Disciplina(
-        nome: _nomeController.text.trim(),
-        codigo: _codigoController.text.trim(),
-        professor: _professorController.text.trim(),
-        sala: _salaController.text.trim(),
-        diasDaSemana: _diasSelecionados,
-        horarioInicio: _horarioInicio!.format(context),
-        horarioFim: _horarioFim!.format(context),
-      );
+      // --- ALTERAÇÃO PRINCIPAL: Criando um Map em vez de um objeto Disciplina ---
+      final Map<String, dynamic> novaDisciplinaData = {
+        'nome': _nomeController.text.trim(),
+        'codigo': _codigoController.text.trim(),
+        'professor': _professorController.text.trim(),
+        'sala': _salaController.text.trim(),
+        'diasDaSemana': _diasSelecionados,
+        'horarioInicio': _horarioInicio!.format(context),
+        'horarioFim': _horarioFim!.format(context),
+      };
 
-      // Usa o serviço para adicionar a disciplina ao Firebase
-      await _firestoreService.addDisciplina(novaDisciplina);
+      // Usa o serviço para adicionar o Map de dados ao Firebase
+      await _firestoreService.addDisciplina(novaDisciplinaData);
 
-      // Fecha a caixa de diálogo
       if (mounted) {
         Navigator.of(context).pop();
       }
