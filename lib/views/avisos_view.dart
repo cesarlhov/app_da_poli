@@ -1,3 +1,5 @@
+// lib/views/avisos_view.dart
+
 import 'package:app_da_poli/models/aviso_model.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';

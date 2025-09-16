@@ -1,3 +1,5 @@
+// lib/services/curso_service.dart
+
 // Este ficheiro simula uma base de dados central com todas as disciplinas de um curso.
 class CursoService {
   // Lista completa de disciplinas do curso de Engenharia de Computação (exemplo)

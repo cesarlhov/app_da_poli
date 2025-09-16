@@ -1,5 +1,6 @@
 // lib/views/jupiter_view.dart
 
+import 'package:app_da_poli/components/aula_card.dart';
 import 'package:app_da_poli/components/slidable_grade_preview.dart';
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/models/user_model.dart';
@@ -17,13 +18,23 @@ class CollapsingGradeHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.onGradeEdited,
   });
 
-  static const double _manhaHeight = 62.5;
-  static const double _tardeHeightPadrao = 62.5;
-  static const double _tardeHeightEstendida = 93.75;
-  static const double _almocoGapPadrao = 13.88;
-  static const double _almocoBlocoHeight = 31.25;
-  static const double _verticalPaddings = 7.3 + 6.7;
-  static const double _internalSpacers = 5.0;
+  // --- CONTROLE CENTRAL DE ALTURAS E ESPAÇAMENTOS ---
+  // Edite apenas aqui para ajustar o layout da grade.
+
+  // 1. Espaçamentos internos ("respiro")
+  static const double _topSpacing = 16.0;
+  static const double _bottomSpacing = 8.0;
+  static const double _headerHeight = 30.0;
+  static const double _footerHeight = 20.0;
+
+  // 2. Altura dos blocos de aula
+  static const double _alturaBlocoManha = 62.5;
+  static const double _alturaBlocoAlmoco = 31.25; // Se TIVER aula
+  static const double _alturaBlocoTarde = 62.5;
+  static const double _alturaBlocoTardeNoite = 93.75; // Se tiver aula à noite
+
+  // 3. VÃO DO ALMOÇO (QUANDO NÃO HÁ AULA) -- EDITE AQUI
+  static const double _alturaVaoAlmoco = 13.88;
 
   ({bool temAulaAlmoco, bool temAulaNoite}) _analyzeSchedule() {
     bool temAulaAlmoco = disciplinas.any((d) {
@@ -45,22 +56,34 @@ class CollapsingGradeHeaderDelegate extends SliverPersistentHeaderDelegate {
   @override
   double get maxExtent {
     final config = _analyzeSchedule();
-    final almocoHeight = config.temAulaAlmoco ? _almocoBlocoHeight : _almocoGapPadrao;
-    final tardeHeight = config.temAulaNoite ? _tardeHeightEstendida : _tardeHeightPadrao;
-    return _manhaHeight + almocoHeight + tardeHeight + _verticalPaddings + _internalSpacers;
+    final alturaMeio = config.temAulaAlmoco ? _alturaBlocoAlmoco : _alturaVaoAlmoco;
+    final alturaTarde = config.temAulaNoite ? _alturaBlocoTardeNoite : _alturaBlocoTarde;
+
+    // A altura total é a soma de todas as partes, sem mágicas.
+    return _headerHeight + _topSpacing + _alturaBlocoManha + alturaMeio + alturaTarde + _bottomSpacing + _footerHeight;
   }
 
   @override
-  double get minExtent => maxExtent / 2;
+  double get minExtent => maxExtent; // Evita o colapso visual
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    // Passamos as alturas exatas para o filho saber como se desenhar.
+    final config = _analyzeSchedule();
+    final alturaMeio = config.temAulaAlmoco ? _alturaBlocoAlmoco : _alturaVaoAlmoco;
+    final alturaTarde = config.temAulaNoite ? _alturaBlocoTardeNoite : _alturaBlocoTarde;
+
     return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
       padding: const EdgeInsets.symmetric(horizontal: 14.6),
       child: SlidableGradePreview(
         key: slidableGradeKey,
         disciplinas: disciplinas,
         onGradeEdited: onGradeEdited,
+        // Passando as alturas exatas para a MiniGradePreview
+        alturaManha: _alturaBlocoManha,
+        alturaAlmocoOuVao: alturaMeio,
+        alturaTarde: alturaTarde,
       ),
     );
   }
@@ -100,19 +123,27 @@ class _JupiterViewState extends State<JupiterView> {
     });
   }
 
+  List<Disciplina> _getAulasDeHoje(List<Disciplina> todasAsDisciplinas) {
+    final Map<int, String> weekdayMap = { 1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta', 6: 'Sábado', 7: 'Domingo' };
+    final String hoje = weekdayMap[DateTime.now().weekday] ?? '';
+    if (hoje.isEmpty) return [];
+    final aulasHoje = todasAsDisciplinas.where((d) => d.diasDaSemana.contains(hoje)).toList();
+    aulasHoje.sort((a, b) {
+      try {
+        final aInicio = int.parse(a.horarioInicio.split(':')[0]) * 60 + int.parse(a.horarioInicio.split(':')[1]);
+        final bInicio = int.parse(b.horarioInicio.split(':')[0]) * 60 + int.parse(b.horarioInicio.split(':')[1]);
+        return aInicio.compareTo(bInicio);
+      } catch (e) { return 0; }
+    });
+    return aulasHoje;
+  }
+
   Widget _buildHeader(AppUser user) {
     const double headerFontSize = 21.75;
     const Color poliBlue = Color(0xFF0460E9);
     const Color poliBlack = Color(0xFF101010);
     const Color poliGrey = Color(0xFFBCBEBF);
-    const headerTextStyle = TextStyle(
-      fontFamily: 'LeagueSpartan',
-      fontWeight: FontWeight.w900,
-      fontSize: headerFontSize,
-      letterSpacing: -0.6,
-      height: 0.87,
-    );
-
+    const headerTextStyle = TextStyle( fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w900, fontSize: headerFontSize, letterSpacing: -0.6, height: 0.87, );
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       padding: const EdgeInsets.symmetric(horizontal: 14.6),
@@ -132,13 +163,7 @@ class _JupiterViewState extends State<JupiterView> {
               Text('ENG. QUÍMICA', style: headerTextStyle.copyWith(color: poliGrey, fontWeight: FontWeight.w900)),
             ],
           ),
-          Row(
-            children: [
-              Icon(Icons.cloud_outlined, color: Colors.grey[300], size: 40),
-              const SizedBox(width: 20),
-              SizedBox(width: 76, height: 76, child: Image.asset('assets/images/gremio_logo.png')),
-            ],
-          ),
+          SizedBox(width: 76, height: 76, child: Image.asset('assets/images/gremio_logo.png')),
         ],
       ),
     );
@@ -155,16 +180,12 @@ class _JupiterViewState extends State<JupiterView> {
         if (snapshot.hasError || !snapshot.hasData || snapshot.data!['user'] == null) {
           return const Center(child: Text('Erro ao carregar dados.'));
         }
-
         final user = snapshot.data!['user'] as AppUser;
         final disciplinas = snapshot.data!['disciplinas'] as List<Disciplina>;
-
+        final aulasDeHoje = _getAulasDeHoje(disciplinas);
         return CustomScrollView(
           slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: StickyHeaderDelegate(child: _buildHeader(user), height: 114),
-            ),
+            SliverPersistentHeader( pinned: true, delegate: StickyHeaderDelegate(child: _buildHeader(user), height: 114), ),
             SliverPersistentHeader(
               pinned: true,
               delegate: CollapsingGradeHeaderDelegate(
@@ -178,13 +199,29 @@ class _JupiterViewState extends State<JupiterView> {
                 GestureDetector(
                   onTap: () => _slidableGradeKey.currentState?.closeMenu(),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14.6),
+                    padding: const EdgeInsets.fromLTRB(14.6, 7, 14.6, 50),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 7),
-                        const Text('HOJE', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
-                        Container(height: 800, color: Colors.red.withOpacity(0.1)),
+                        const Text( 'HOJE', style: TextStyle( fontSize: 25, fontWeight: FontWeight.w900, fontFamily: 'LeagueSpartan',),),
+                        const SizedBox(height: 10),
+                        if (aulasDeHoje.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 40.0),
+                            child: Center(
+                              child: Text( 'Nenhuma aula hoje. Aproveite!', style: TextStyle(fontSize: 16, color: Colors.grey),),
+                            ),
+                          )
+                        else
+                          ListView.builder(
+                            itemCount: aulasDeHoje.length,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemBuilder: (context, index) {
+                              final aula = aulasDeHoje[index];
+                              return AulaCard(disciplina: aula);
+                            },
+                          ),
                       ],
                     ),
                   ),
@@ -198,7 +235,6 @@ class _JupiterViewState extends State<JupiterView> {
   }
 }
 
-// O StickyHeaderDelegate genérico
 class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   final double? height;

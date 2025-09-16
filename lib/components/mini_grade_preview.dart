@@ -57,24 +57,35 @@ class MiniGradePreview extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Table(
+          // --- ALTERAÇÃO 1: Adicionando a borda diretamente na Tabela ---
+          border: TableBorder.all(
+            color: Colors.grey.withOpacity(0.3), // Cor da linha
+            width: 1.5, // Espessura da linha
+          ),
           children: List.generate(
             horas.length,
-            (rowIndex) => TableRow(
+                (rowIndex) => TableRow(
               children: List.generate(
                 dias.length,
-                (colIndex) {
+                    (colIndex) {
                   final diaAtual = dias[colIndex];
                   final horaAtual = horas[rowIndex];
                   final temAula =
-                      _temAulaNoSlot(diaAtual, horaAtual, disciplinas);
+                  _temAulaNoSlot(diaAtual, horaAtual, disciplinas);
+
+                  // O conteúdo de cada célula
                   return Container(
                     height: 22,
-                    margin: const EdgeInsets.all(4.0),
+                    // --- ALTERAÇÃO 2: Removemos a margem para a borda da tabela funcionar ---
+                    // margin: const EdgeInsets.all(4.0),
+
+                    // A decoração agora não precisa mais da borda individual
                     decoration: BoxDecoration(
                       color: temAula
                           ? Colors.blue.withOpacity(1)
                           : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
+                      // Removemos o borderRadius para não conflitar com as linhas retas
+                      // borderRadius: BorderRadius.circular(4),
                     ),
                   );
                 },

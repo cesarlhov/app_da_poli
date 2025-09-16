@@ -1,3 +1,5 @@
+// lib/views/profile_view.dart
+
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/models/user_model.dart';
 import 'package:app_da_poli/services/curso_service.dart';
