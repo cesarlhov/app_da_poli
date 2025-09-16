@@ -1,7 +1,7 @@
 // lib/auth/app_shell.dart
 import 'package:app_da_poli/components/main_bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Import necessário
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 class AppShell extends StatelessWidget {
@@ -11,17 +11,12 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- MUDANÇA: Usando AnnotatedRegion para controlar as barras do sistema ---
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
-        // Deixa a barra de status transparente, mostrando nossa cor de fundo
-        statusBarColor: Colors.transparent, 
-        // Ícones da barra de status (hora, bateria) ficam escuros
-        statusBarIconBrightness: Brightness.dark, 
-        // Cor da barra de navegação de gestos (embaixo)
-        systemNavigationBarColor: Theme.of(context).scaffoldBackgroundColor, 
-        // Ícones da barra de gestos (a "pílula") ficam escuros
-        systemNavigationBarIconBrightness: Brightness.dark, 
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Theme.of(context).scaffoldBackgroundColor,
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
         body: SafeArea(
@@ -41,8 +36,8 @@ class AppShell extends StatelessWidget {
   int _calculateSelectedIndex(BuildContext context) {
     final String location = GoRouterState.of(context).uri.toString();
     if (location.startsWith('/avisos')) return 1;
-    if (location.startsWith('/eventos')) return 2; // Novo índice
-    if (location.startsWith('/config')) return 3;
+    if (location.startsWith('/tarefas')) return 2;
+    if (location.startsWith('/eventos')) return 3; // Corrigido
     if (location.startsWith('/perfil')) return 4;
     return 0; // '/inicio'
   }
@@ -56,10 +51,10 @@ class AppShell extends StatelessWidget {
         context.go('/avisos');
         break;
       case 2:
-        context.go('/eventos'); // Nova rota
+        context.go('/tarefas');
         break;
       case 3:
-        context.go('/config');
+        context.go('/eventos'); // Corrigido
         break;
       case 4:
         context.go('/perfil');

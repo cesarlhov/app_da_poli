@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:ui' as ui;
 
+// ... (o código do RPSCustomPainter permanece o mesmo) ...
+
 class RPSCustomPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -75,7 +77,14 @@ class _MainBottomNavBarState extends State<MainBottomNavBar> {
               children: [
                 Row(
                   children: List.generate(5, (index) {
-                    final icons = ['assets/images/jupiter_icon.svg', Icons.notifications, Icons.calendar_today, Icons.settings, Icons.school];
+                    // --- LISTA DE ÍCONES ATUALIZADA ---
+                    final icons = [
+                      'assets/images/jupiter_icon.svg', // Início
+                      Icons.notifications_none_rounded,       // Avisos
+                      Icons.playlist_add_check_rounded, // Tarefas
+                      Icons.calendar_today_rounded,     // Eventos
+                      Icons.person_outline_rounded      // Perfil
+                    ];
                     final isSelected = widget.currentIndex == index;
                     return Expanded(
                       child: GestureDetector(

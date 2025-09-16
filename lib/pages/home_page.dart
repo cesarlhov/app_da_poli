@@ -1,5 +1,6 @@
 // lib/pages/home_page.dart
 
+/*
 import 'package:app_da_poli/views/avisos_view.dart';
 import 'package:app_da_poli/views/eventos_view.dart';
 import 'package:app_da_poli/views/jupiter_view.dart';
@@ -138,5 +139,4 @@ class CustomBottomNavBar extends StatelessWidget {
     );
   }
 }
-
-
+*/
