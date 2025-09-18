@@ -1,9 +1,10 @@
+// lib/components/add_tarefa_dialog.dart
+
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-//-------------------------------------------------
-// CAIXA DE DIÁLOGO PARA ADICIONAR TAREFA
-//-------------------------------------------------
+/// Um diálogo para adicionar uma nova tarefa.
 class AddTarefaDialog extends StatefulWidget {
   const AddTarefaDialog({super.key});
 
@@ -17,12 +18,19 @@ class _AddTarefaDialogState extends State<AddTarefaDialog> {
   DateTime? _dataSelecionada;
   final FirestoreService _firestoreService = FirestoreService();
 
+  @override
+  void dispose() {
+    _tituloController.dispose();
+    super.dispose();
+  }
+
+  /// Exibe o seletor de data e atualiza o estado.
   Future<void> _selecionarData(BuildContext context) async {
     final DateTime? data = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: _dataSelecionada ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 30)), // Permite datas passadas
+      lastDate: DateTime.now().add(const Duration(days: 365 * 2)), // Permite datas futuras
     );
     if (data != null) {
       setState(() {
@@ -31,6 +39,7 @@ class _AddTarefaDialogState extends State<AddTarefaDialog> {
     }
   }
 
+  /// Valida e salva a nova tarefa no Firestore.
   void _salvarTarefa() {
     if (_formKey.currentState!.validate()) {
       if (_dataSelecionada == null) {
@@ -65,11 +74,13 @@ class _AddTarefaDialogState extends State<AddTarefaDialog> {
                 Text(
                   _dataSelecionada == null
                       ? 'Nenhuma data selecionada'
-                      : 'Entrega: ${_dataSelecionada!.day}/${_dataSelecionada!.month}/${_dataSelecionada!.year}',
+                      // Usando o intl para um formato mais legível.
+                      : 'Entrega: ${DateFormat('dd/MM/yyyy').format(_dataSelecionada!)}',
                 ),
                 IconButton(
                   icon: const Icon(Icons.calendar_today),
                   onPressed: () => _selecionarData(context),
+                  tooltip: 'Selecionar Data',
                 ),
               ],
             ),
@@ -87,11 +98,5 @@ class _AddTarefaDialogState extends State<AddTarefaDialog> {
         ),
       ],
     );
-  }
-
-  @override
-  void dispose() {
-    _tituloController.dispose();
-    super.dispose();
   }
 }

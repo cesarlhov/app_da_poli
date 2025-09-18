@@ -40,6 +40,7 @@ dependencies:
   flutter_svg: ^2.0.10+1
   google_generative_ai: ^0.4.7
   google_sign_in: ^7.1.1
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:

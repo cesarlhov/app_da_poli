@@ -1,10 +1,12 @@
 // lib/pages/splash_page.dart
 
-import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+/// A primeira tela exibida ao abrir o app.
+/// Sua única responsabilidade é verificar o estado de autenticação do usuário
+/// e redirecioná-lo para a tela de Login ou para a Home (`/inicio`).
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
 
@@ -13,40 +15,30 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage> {
-  late StreamSubscription<User?> _authSubscription;
-
   @override
   void initState() {
     super.initState();
-    // Garante que o código só rode depois da primeira renderização
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Escuta a primeira mudança de estado de autenticação para decidir para onde ir.
-      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
-        // Garante que a navegação só ocorra uma vez
-        _authSubscription.cancel();
-        if (mounted) {
-          if (user == null) {
-            // Se não há usuário, vai para a tela de login
-            context.go('/login');
-          } else {
-            // Se há usuário, vai para a tela inicial
-            context.go('/inicio');
-          }
-        }
-      });
-    });
+    _redirect();
   }
 
-  @override
-  void dispose() {
-    // Cancela a inscrição caso a tela seja destruída
-    _authSubscription.cancel();
-    super.dispose();
+  /// Verifica o usuário atual e redireciona para a rota apropriada.
+  Future<void> _redirect() async {
+    // Aguarda um frame para garantir que o contexto e o GoRouter estejam prontos.
+    await Future.delayed(Duration.zero);
+
+    if (mounted) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        context.go('/login');
+      } else {
+        context.go('/inicio');
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Tela de carregamento super simples
+    // Exibe um indicador de carregamento enquanto a verificação ocorre.
     return const Scaffold(
       body: Center(
         child: CircularProgressIndicator(),

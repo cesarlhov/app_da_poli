@@ -4,37 +4,29 @@ import 'package:app_da_poli/components/add_tarefa_dialog.dart';
 import 'package:app_da_poli/models/tarefa_model.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-//-------------------------------------------------
-// TELA PARA EXIBIR E GERIR TAREFAS
-//-------------------------------------------------
-class TarefasView extends StatefulWidget {
+/// View que exibe e gerencia la lista de tarefas do usuário.
+class TarefasView extends StatelessWidget {
   const TarefasView({super.key});
 
   @override
-  State<TarefasView> createState() => _TarefasViewState();
-}
-
-class _TarefasViewState extends State<TarefasView> {
-  final FirestoreService _firestoreService = FirestoreService();
-
-  void _mostrarAddTarefaDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => const AddTarefaDialog(),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final firestoreService = FirestoreService();
+
+    void mostrarAddTarefaDialog() {
+      showDialog(context: context, builder: (context) => const AddTarefaDialog());
+    }
+
     return Scaffold(
       floatingActionButton: FloatingActionButton(
-        onPressed: _mostrarAddTarefaDialog,
-        backgroundColor: const Color(0xFF003366),
-        child: const Icon(Icons.add),
+        onPressed: mostrarAddTarefaDialog,
+        backgroundColor: const Color(0xFF0D41A9),
+        tooltip: 'Adicionar Tarefa',
+        child: const Icon(Icons.add, color: Colors.white),
       ),
       body: StreamBuilder<List<Tarefa>>(
-        stream: _firestoreService.getTarefas(),
+        stream: firestoreService.getTarefas(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -44,36 +36,36 @@ class _TarefasViewState extends State<TarefasView> {
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(
-              child: Text('Nenhuma tarefa pendente. Bom trabalho!',
-                  style: TextStyle(fontSize: 18, color: Colors.grey)),
+              child: Text(
+                'Nenhuma tarefa pendente. Bom trabalho!',
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+              ),
             );
           }
 
           final tarefas = snapshot.data!;
           return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(8.0),
             itemCount: tarefas.length,
             itemBuilder: (context, index) {
               final tarefa = tarefas[index];
               return Card(
                 elevation: 2,
-                margin: const EdgeInsets.symmetric(vertical: 8.0),
+                margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 8.0),
                 child: ListTile(
                   title: Text(
                     tarefa.titulo,
                     style: TextStyle(
-                      decoration: tarefa.concluida
-                          ? TextDecoration.lineThrough
-                          : TextDecoration.none,
+                      decoration: tarefa.concluida ? TextDecoration.lineThrough : TextDecoration.none,
+                      color: tarefa.concluida ? Colors.grey : null,
                     ),
                   ),
-                  subtitle: Text(
-                      'Entrega: ${tarefa.dataEntrega.toDate().day}/${tarefa.dataEntrega.toDate().month}'),
+                  subtitle: Text('Entrega: ${DateFormat('dd/MM/yyyy').format(tarefa.dataEntrega.toDate())}'),
                   trailing: Checkbox(
                     value: tarefa.concluida,
                     onChanged: (bool? value) {
                       if (value != null) {
-                        _firestoreService.updateTarefa(tarefa.id, value);
+                        firestoreService.updateTarefa(tarefa.id, value);
                       }
                     },
                   ),

@@ -3,6 +3,8 @@
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:flutter/material.dart';
 
+/// Um card vertical e compacto que representa uma disciplina na grade horária.
+/// Exibe o código da disciplina verticalmente.
 class DisciplinaCard extends StatelessWidget {
   final Disciplina disciplina;
   final VoidCallback onTap;
@@ -15,6 +17,7 @@ class DisciplinaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Divide o código da disciplina em caracteres individuais para exibição vertical.
     final characters = disciplina.codigo.split('');
 
     return GestureDetector(
@@ -23,14 +26,14 @@ class DisciplinaCard extends StatelessWidget {
         width: double.infinity,
         decoration: BoxDecoration(
           color: disciplina.cor,
-          borderRadius: BorderRadius.circular(100.0),
+          borderRadius: BorderRadius.circular(10.0), // Raio de borda um pouco menor para um visual mais limpo
         ),
-        // --- MUDANÇA: Usando FittedBox para garantir que o texto sempre caiba ---
+        // FittedBox garante que o conteúdo (a coluna de texto) se ajuste
+        // ao espaço disponível, encolhendo se necessário.
         child: FittedBox(
-          fit: BoxFit.contain, // Encolhe o conteúdo para caber
+          fit: BoxFit.contain,
           child: Padding(
-            // Adiciona um pequeno respiro interno
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: characters.map((char) => Text(
@@ -38,7 +41,7 @@ class DisciplinaCard extends StatelessWidget {
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
-                  fontSize: 12, // O tamanho da fonte agora é uma referência
+                  fontSize: 12, // O tamanho da fonte é a base, mas pode ser ajustado pelo FittedBox
                 ),
               )).toList(),
             ),

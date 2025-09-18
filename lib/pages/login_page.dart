@@ -1,9 +1,11 @@
 // lib/pages/login_page.dart
 
+import 'package:app_da_poli/pages/signup_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart'; // Garanta que este import existe
+import 'package:go_router/go_router.dart';
 
+/// Página de autenticação onde o usuário pode entrar com e-mail e senha.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -12,45 +14,120 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
 
-  void _signIn() async {
-    // Exibe um círculo de carregamento
-    showDialog(
-      context: context,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-      barrierDismissible: false,
-    );
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  /// Tenta autenticar o usuário com as credenciais fornecidas.
+  Future<void> _signIn() async {
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      _showErrorSnackBar('Por favor, preencha e-mail e senha.');
+      return;
+    }
+
+    setState(() { _isLoading = true; });
 
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
       );
 
-      // Se o login for bem-sucedido, fecha o dialog e navega
-      if (mounted) {
-        context.pop(); // Fecha o círculo de carregamento
-        context.go('/inicio'); // <<< LINHA ADICIONADA: Navega para a tela inicial
-      }
+      if (mounted) context.go('/inicio');
     } on FirebaseAuthException catch (e) {
-      if (mounted) {
-        context.pop(); // Fecha o círculo de carregamento
-        // Mostra uma mensagem de erro
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message ?? 'Erro desconhecido')),
-        );
-      }
+      _showErrorSnackBar(e.message ?? 'Ocorreu um erro de autenticação.');
+    } finally {
+      if (mounted) setState(() { _isLoading = false; });
     }
+  }
+  
+  /// Exibe uma SnackBar de erro.
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  /// Navega para a página de criação de conta.
+  void _navigateToSignUp() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const SignUpPage()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // O resto do seu código da tela de login continua aqui...
-    // Apenas a função _signIn() foi modificada.
     return Scaffold(
-      // ... seu widget de build
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'App da Poli',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 40),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'E-mail',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(
+                    labelText: 'Senha',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock_outline),
+                  ),
+                  obscureText: true,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _signIn,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Entrar', style: TextStyle(fontSize: 18)),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: _navigateToSignUp,
+                  child: const Text('Não tem uma conta? Cadastre-se'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

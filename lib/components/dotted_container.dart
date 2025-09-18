@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 
+/// Um Container com uma borda pontilhada customizável.
 class DottedContainer extends StatelessWidget {
   final Widget? child;
   final Color color;
@@ -18,22 +19,20 @@ class DottedContainer extends StatelessWidget {
     this.borderColor = Colors.black,
     this.strokeWidth = 1.0,
     this.borderRadius = BorderRadius.zero,
-    this.dashPattern = const <double>[3, 1],
+    this.dashPattern = const <double>[3, 1], // Padrão: 3 pixels desenhados, 1 pixel de espaço
   });
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      // --- CORREÇÃO AQUI: Trocamos 'painter' por 'foregroundPainter' ---
-      // 'painter' desenha ATRÁS do 'child'.
-      // 'foregroundPainter' desenha DEPOIS e NA FRENTE do 'child'.
+      // Usamos foregroundPainter para garantir que a borda seja desenhada
+      // NA FRENTE do child, evitando que a cor de fundo do child a cubra.
       foregroundPainter: _DottedBorderPainter(
         color: borderColor,
         strokeWidth: strokeWidth,
         borderRadius: borderRadius,
         dashPattern: dashPattern,
       ),
-      // O Container (fundo cinza) é desenhado PRIMEIRO.
       child: Container(
         decoration: BoxDecoration(
           color: color,
@@ -45,6 +44,7 @@ class DottedContainer extends StatelessWidget {
   }
 }
 
+/// O CustomPainter que efetivamente desenha a borda pontilhada.
 class _DottedBorderPainter extends CustomPainter {
   final Color color;
   final double strokeWidth;
@@ -52,10 +52,10 @@ class _DottedBorderPainter extends CustomPainter {
   final List<double> dashPattern;
 
   _DottedBorderPainter({
-    this.color = Colors.black,
-    this.strokeWidth = 1.0,
-    this.borderRadius = BorderRadius.zero,
-    this.dashPattern = const <double>[3, 1],
+    required this.color,
+    required this.strokeWidth,
+    required this.borderRadius,
+    required this.dashPattern,
   });
 
   @override
@@ -65,29 +65,39 @@ class _DottedBorderPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke;
 
+    // Cria um retângulo com as dimensões do widget.
     final Rect fullRect = Rect.fromLTWH(0, 0, size.width, size.height);
-
-    // A borda interna é desenhada encolhendo o caminho do desenho
+    
+    // Reduz o retângulo pela metade da espessura da borda para que a linha
+    // seja desenhada dentro dos limites do widget.
     final Rect innerRect = fullRect.deflate(strokeWidth / 2);
 
+    // Converte o retângulo em um RRect (retângulo com cantos arredondados).
     final RRect rrect = borderRadius.toRRect(innerRect);
     final Path path = Path()..addRRect(rrect);
 
+    // Itera sobre o caminho (path) para desenhar os segmentos pontilhados.
     final ui.PathMetrics pathMetrics = path.computeMetrics();
     for (final ui.PathMetric pathMetric in pathMetrics) {
       double distance = 0.0;
       while (distance < pathMetric.length) {
+        // Extrai e desenha um pequeno segmento do caminho (o traço).
         canvas.drawPath(
           pathMetric.extractPath(distance, distance + dashPattern[0]),
           paint,
         );
+        // Move a "distância" para o início do próximo traço.
         distance += dashPattern[0] + dashPattern[1];
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
+  bool shouldRepaint(covariant _DottedBorderPainter oldDelegate) {
+    // Redesenha se qualquer uma das propriedades mudar.
+    return oldDelegate.color != color ||
+           oldDelegate.strokeWidth != strokeWidth ||
+           oldDelegate.borderRadius != borderRadius ||
+           oldDelegate.dashPattern != dashPattern;
   }
 }

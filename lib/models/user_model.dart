@@ -1,7 +1,6 @@
 // lib/models/user_model.dart
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-
+/// Representa um usuário do aplicativo com suas informações de perfil.
 class AppUser {
   final String uid;
   final String nome;
@@ -9,7 +8,7 @@ class AppUser {
   final String curso;
   final String nusp;
 
-  AppUser({
+  const AppUser({
     required this.uid,
     required this.nome,
     required this.email,
@@ -17,12 +16,11 @@ class AppUser {
     required this.nusp,
   });
 
-  // --- MUDANÇA: Renomeado de fromFirestore para fromMap ---
-  // Agora ele segue o mesmo padrão do nosso Disciplina model.
+  /// Factory constructor para criar uma instância de [AppUser] a partir de um mapa.
   factory AppUser.fromMap(String id, Map<String, dynamic> data) {
     return AppUser(
-      uid: id, // Usamos o id do documento como uid
-      nome: data['nome'] ?? '',
+      uid: id,
+      nome: data['nome'] ?? 'Usuário sem nome',
       email: data['email'] ?? '',
       curso: data['curso'] ?? 'Não definido',
       nusp: data['nusp'] ?? '',

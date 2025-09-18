@@ -1,9 +1,10 @@
+// lib/components/weekday_selector.dart
+
 import 'package:flutter/material.dart';
 
-//-------------------------------------------------
-// COMPONENTE PARA SELECIONAR OS DIAS DA SEMANA
-//-------------------------------------------------
+/// Um widget que permite ao usuário selecionar múltiplos dias da semana.
 class WeekdaySelector extends StatefulWidget {
+  /// Callback que retorna a lista de dias selecionados (ex: ["Segunda", "Quarta"]).
   final Function(List<String>) onSelectionChanged;
 
   const WeekdaySelector({super.key, required this.onSelectionChanged});
@@ -13,12 +14,18 @@ class WeekdaySelector extends StatefulWidget {
 }
 
 class _WeekdaySelectorState extends State<WeekdaySelector> {
-  final List<String> _dias = ['S', 'T', 'Q', 'Q', 'S'];
-  final List<String> _diasCompletos = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+  // Mapeamento dos dias da semana para suas abreviações.
+  static const Map<String, String> _diasDaSemana = {
+    'Segunda': 'S',
+    'Terça': 'T',
+    'Quarta': 'Q',
+    'Quinta': 'Q',
+    'Sexta': 'S',
+  };
+
   final List<String> _diasSelecionados = [];
 
-  void _toggleDay(int index) {
-    final dia = _diasCompletos[index];
+  void _toggleDay(String dia) {
     setState(() {
       if (_diasSelecionados.contains(dia)) {
         _diasSelecionados.remove(dia);
@@ -26,6 +33,7 @@ class _WeekdaySelectorState extends State<WeekdaySelector> {
         _diasSelecionados.add(dia);
       }
     });
+    // Notifica o widget pai sobre a mudança.
     widget.onSelectionChanged(_diasSelecionados);
   }
 
@@ -33,16 +41,18 @@ class _WeekdaySelectorState extends State<WeekdaySelector> {
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: List.generate(_dias.length, (index) {
-        final diaCompleto = _diasCompletos[index];
+      children: _diasDaSemana.entries.map((entry) {
+        final diaCompleto = entry.key;
+        final diaAbreviado = entry.value;
         final isSelected = _diasSelecionados.contains(diaCompleto);
+
         return GestureDetector(
-          onTap: () => _toggleDay(index),
+          onTap: () => _toggleDay(diaCompleto),
           child: CircleAvatar(
-            radius: 20,
-            backgroundColor: isSelected ? const Color(0xFF003366) : Colors.grey[300],
+            radius: 22, // Um pouco maior para facilitar o toque
+            backgroundColor: isSelected ? const Color(0xFF0D41A9) : Colors.grey[300],
             child: Text(
-              _dias[index],
+              diaAbreviado,
               style: TextStyle(
                 color: isSelected ? Colors.white : Colors.black,
                 fontWeight: FontWeight.bold,
@@ -50,7 +60,7 @@ class _WeekdaySelectorState extends State<WeekdaySelector> {
             ),
           ),
         );
-      }),
+      }).toList(),
     );
   }
 }

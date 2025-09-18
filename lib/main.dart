@@ -6,6 +6,7 @@ import 'package:app_da_poli/pages/chat_page.dart';
 import 'package:app_da_poli/pages/forum_page.dart';
 import 'package:app_da_poli/pages/login_page.dart';
 import 'package:app_da_poli/pages/splash_page.dart';
+import 'package:app_da_poli/views/active_disciplinas_page.dart';
 import 'package:app_da_poli/views/avisos_view.dart';
 import 'package:app_da_poli/views/edit_grade_page.dart';
 import 'package:app_da_poli/views/eventos_view.dart';
@@ -17,19 +18,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-// --- MODIFICAÇÃO PRINCIPAL COMEÇA AQUI ---
-
 void main() {
-  // Garante que o Flutter está pronto
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Define a orientação do sistema
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     systemNavigationBarColor: Color(0xFFF0F0F0),
     systemNavigationBarIconBrightness: Brightness.dark,
   ));
-
-  // Inicia o App, que agora vai gerenciar a inicialização do Firebase
   runApp(const AppInitializer());
 }
 
@@ -41,7 +35,6 @@ class AppInitializer extends StatefulWidget {
 }
 
 class _AppInitializerState extends State<AppInitializer> {
-  // Guarda o resultado da inicialização do Firebase
   late final Future<FirebaseApp> _initialization;
 
   @override
@@ -54,79 +47,49 @@ class _AppInitializerState extends State<AppInitializer> {
 
   @override
   Widget build(BuildContext context) {
-    // FutureBuilder espera a inicialização terminar
     return FutureBuilder(
       future: _initialization,
       builder: (context, snapshot) {
-        // Se der erro na inicialização, mostra uma tela de erro
         if (snapshot.hasError) {
           return const MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: Text(
-                  'Erro ao inicializar o Firebase.',
-                  textDirection: TextDirection.ltr,
-                ),
-              ),
-            ),
+            home: Scaffold(body: Center(child: Text('Erro ao inicializar o Firebase.'))),
           );
         }
-
-        // Se terminar a inicialização com sucesso, mostra o app principal
         if (snapshot.connectionState == ConnectionState.done) {
           return MyApp(router: _createRouter());
         }
-
-        // Enquanto estiver inicializando, mostra uma tela de carregamento
         return const MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
+          home: Scaffold(body: Center(child: CircularProgressIndicator())),
         );
       },
     );
   }
 }
 
-// --- O RESTO DO SEU CÓDIGO PERMANECE O MESMO ---
-
 GoRouter _createRouter() {
   return GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const SplashPage(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const SplashPage()),
+      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
-          GoRoute(path: '/inicio', pageBuilder: (context, state) => NoTransitionPage(child: const JupiterView())),
-          GoRoute(path: '/avisos', pageBuilder: (context, state) => NoTransitionPage(child: const AvisosView())),
-          GoRoute(path: '/tarefas', pageBuilder: (context, state) => NoTransitionPage(child: const TarefasView())),
-          GoRoute(path: '/eventos', pageBuilder: (context, state) => NoTransitionPage(child: const EventosView())),
-          GoRoute(path: '/perfil', pageBuilder: (context, state) => NoTransitionPage(child: const ProfileView())),
+          GoRoute(path: '/inicio', pageBuilder: (context, state) => const NoTransitionPage(child: JupiterView())),
+          GoRoute(path: '/avisos', pageBuilder: (context, state) => const NoTransitionPage(child: AvisosView())),
+          GoRoute(path: '/tarefas', pageBuilder: (context, state) => const NoTransitionPage(child: TarefasView())),
+          GoRoute(path: '/eventos', pageBuilder: (context, state) => const NoTransitionPage(child: EventosView())),
+          GoRoute(path: '/perfil', pageBuilder: (context, state) => const NoTransitionPage(child: ProfileView())),
         ],
       ),
+
       GoRoute(path: '/edit-grade', builder: (context, state) => const EditGradePage()),
-      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
       GoRoute(path: '/forum', builder: (context, state) => const ForumPage()),
       GoRoute(path: '/chat', builder: (context, state) => const ChatPage()),
+      GoRoute(path: '/active-disciplinas', builder: (context, state) => const ActiveDisciplinasPage()),
     ],
   );
-}
-
-class NoTransitionPage<T> extends CustomTransitionPage<T> {
-  NoTransitionPage({required super.child, super.key})
-      : super(
-          transitionDuration: Duration.zero,
-          reverseTransitionDuration: Duration.zero,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return child;
-          },
-        );
 }
 
 class MyApp extends StatelessWidget {
@@ -140,11 +103,23 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFFF0F0F0),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Color(0xFFF0F0F0),
-        ),
         primarySwatch: Colors.blue,
       ),
     );
+  }
+}
+
+/// Uma página customizada que remove a animação de transição.
+class NoTransitionPage<T> extends CustomTransitionPage<T> {
+  const NoTransitionPage({required super.child, super.key})
+      : super(
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          transitionsBuilder: _transitionsBuilder, // Referência à função estática
+        );
+
+  // A função builder agora é um método estático separado.
+  static Widget _transitionsBuilder(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    return child;
   }
 }

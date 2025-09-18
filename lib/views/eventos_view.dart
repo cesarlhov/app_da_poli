@@ -2,9 +2,7 @@
 
 import 'package:flutter/material.dart';
 
-//-------------------------------------------------
-// TELA PARA EXIBIR OS EVENTOS
-//-------------------------------------------------
+/// View para exibir um mural de eventos (atualmente em construção).
 class EventosView extends StatelessWidget {
   const EventosView({super.key});
 

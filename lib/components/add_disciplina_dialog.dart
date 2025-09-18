@@ -1,20 +1,11 @@
+// lib/components/add_disciplina_dialog.dart
+
 import 'package:app_da_poli/components/weekday_selector.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 
-//-------------------------------------------------
-// CAIXA DE DIÁLOGO INTERATIVA PARA ADICIONAR DISCIPLINA
-//-------------------------------------------------
-
-// Classe para as nossas disciplinas pré-cadastradas
-class DisciplinaPreCadastrada {
-  final String nome;
-  final String codigo;
-  final String professor;
-
-  DisciplinaPreCadastrada(this.nome, this.codigo, this.professor);
-}
-
+/// Um diálogo para adicionar ou editar uma disciplina.
+/// Utiliza o serviço do Firestore para salvar os dados.
 class AddDisciplinaDialog extends StatefulWidget {
   const AddDisciplinaDialog({super.key});
 
@@ -35,19 +26,36 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
 
   final FirestoreService _firestoreService = FirestoreService();
 
+  // Exemplo de como as sugestões podem ser estruturadas.
+  // O ideal seria carregar esta lista de um serviço ou banco de dados.
   static final List<DisciplinaPreCadastrada> _disciplinasSugeridas = [
-    // ... sua lista de sugestões ...
+     DisciplinaPreCadastrada('Cálculo Numérico', 'PME3380', 'Professor A'),
+     DisciplinaPreCadastrada('Circuitos Elétricos', 'PEA3301', 'Professor B'),
   ];
 
-  void _salvarDisciplina() async {
+  @override
+  void dispose() {
+    // Limpeza dos controllers para evitar memory leaks.
+    _nomeController.dispose();
+    _codigoController.dispose();
+    _professorController.dispose();
+    _salaController.dispose();
+    super.dispose();
+  }
+
+  /// Valida o formulário e salva a nova disciplina no Firestore.
+  Future<void> _salvarDisciplina() async {
+    // Valida se os horários foram selecionados.
     if (_horarioInicio == null || _horarioFim == null) {
-      // ... sua validação de horário ...
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Por favor, selecione os horários de início e fim.')),
+      );
       return;
     }
 
+    // Valida o resto do formulário.
     if (_formKey.currentState!.validate()) {
-      // --- ALTERAÇÃO PRINCIPAL: Criando um Map em vez de um objeto Disciplina ---
-      final Map<String, dynamic> novaDisciplinaData = {
+      final novaDisciplinaData = {
         'nome': _nomeController.text.trim(),
         'codigo': _codigoController.text.trim(),
         'professor': _professorController.text.trim(),
@@ -57,7 +65,6 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
         'horarioFim': _horarioFim!.format(context),
       };
 
-      // Usa o serviço para adicionar o Map de dados ao Firebase
       await _firestoreService.addDisciplina(novaDisciplinaData);
 
       if (mounted) {
@@ -66,12 +73,14 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
     }
   }
 
-  Future<void> _selecionarHorario(BuildContext context, bool isInicio) async {
+  /// Exibe o seletor de tempo e atualiza o estado.
+  Future<void> _selecionarHorario(BuildContext context, {required bool isInicio}) async {
     final TimeOfDay? horarioSelecionado = await showTimePicker(
       context: context,
-      initialTime: _horarioInicio ?? TimeOfDay.now(),
+      initialTime: isInicio ? _horarioInicio ?? TimeOfDay.now() : _horarioFim ?? TimeOfDay.now(),
       helpText: isInicio ? 'SELECIONAR HORÁRIO DE INÍCIO' : 'SELECIONAR HORÁRIO DE FIM',
     );
+
     if (horarioSelecionado != null) {
       setState(() {
         if (isInicio) {
@@ -93,38 +102,36 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Autocomplete para o nome da disciplina
               Autocomplete<DisciplinaPreCadastrada>(
                 optionsBuilder: (TextEditingValue textEditingValue) {
                   if (textEditingValue.text.isEmpty) {
                     return const Iterable<DisciplinaPreCadastrada>.empty();
                   }
-                  return _disciplinasSugeridas.where((disciplina) => disciplina
-                      .nome
-                      .toLowerCase()
-                      .contains(textEditingValue.text.toLowerCase()));
+                  return _disciplinasSugeridas.where((d) =>
+                      d.nome.toLowerCase().contains(textEditingValue.text.toLowerCase()));
                 },
                 displayStringForOption: (DisciplinaPreCadastrada option) => option.nome,
                 onSelected: (DisciplinaPreCadastrada selection) {
-                  // Preenche os outros campos automaticamente
+                  // Preenche os campos automaticamente ao selecionar uma sugestão.
                   setState(() {
                     _nomeController.text = selection.nome;
                     _codigoController.text = selection.codigo;
                     _professorController.text = selection.professor;
                   });
                 },
-                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                   return TextFormField(
-                    controller: controller,
+                fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                  // Sincroniza o controller do Autocomplete com o nosso controller principal.
+                  _nomeController.value = textEditingController.value;
+                  return TextFormField(
+                    controller: textEditingController,
                     focusNode: focusNode,
                     decoration: const InputDecoration(labelText: 'Nome da Disciplina'),
-                     validator: (value) {
-                       _nomeController.text = value ?? '';
-                       if (value == null || value.isEmpty) {
-                         return 'Campo obrigatório';
-                       }
-                       return null;
-                     }
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Campo obrigatório';
+                      }
+                      return null;
+                    },
                   );
                 },
               ),
@@ -143,35 +150,17 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
               const SizedBox(height: 20),
               const Text('Dias da Semana', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              // Seletor de dias da semana
               WeekdaySelector(
                 onSelectionChanged: (dias) {
                   _diasSelecionados = dias;
                 },
               ),
               const SizedBox(height: 20),
-              // Seletores de horário
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  Column(
-                    children: [
-                      const Text('Início'),
-                      ElevatedButton(
-                        onPressed: () => _selecionarHorario(context, true),
-                        child: Text(_horarioInicio?.format(context) ?? 'Selecionar'),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    children: [
-                      const Text('Fim'),
-                      ElevatedButton(
-                        onPressed: () => _selecionarHorario(context, false),
-                        child: Text(_horarioFim?.format(context) ?? 'Selecionar'),
-                      ),
-                    ],
-                  ),
+                  _buildTimePicker('Início', _horarioInicio, () => _selecionarHorario(context, isInicio: true)),
+                  _buildTimePicker('Fim', _horarioFim, () => _selecionarHorario(context, isInicio: false)),
                 ],
               ),
             ],
@@ -191,13 +180,25 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
     );
   }
 
-  @override
-  void dispose() {
-    _nomeController.dispose();
-    _codigoController.dispose();
-    _professorController.dispose();
-    _salaController.dispose();
-    super.dispose();
+  /// Widget auxiliar para criar os botões de seleção de horário.
+  Widget _buildTimePicker(String label, TimeOfDay? time, VoidCallback onPressed) {
+    return Column(
+      children: [
+        Text(label),
+        ElevatedButton(
+          onPressed: onPressed,
+          child: Text(time?.format(context) ?? 'Selecionar'),
+        ),
+      ],
+    );
   }
 }
 
+/// Classe auxiliar para o Autocomplete.
+class DisciplinaPreCadastrada {
+  final String nome;
+  final String codigo;
+  final String professor;
+
+  DisciplinaPreCadastrada(this.nome, this.codigo, this.professor);
+}

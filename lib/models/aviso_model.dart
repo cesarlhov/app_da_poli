@@ -1,28 +1,28 @@
 // lib/models/aviso_model.dart
 
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // <-- ESTA LINHA CORRIGE OS ERROS
 
-// Este ficheiro define a estrutura de dados para um Aviso.
+/// Representa um aviso ou comunicado geral no aplicativo.
 class Aviso {
   final String id;
   final String titulo;
   final String conteudo;
   final Timestamp data;
 
-  Aviso({
+  const Aviso({
     required this.id,
     required this.titulo,
     required this.conteudo,
     required this.data,
   });
 
-  // --- MUDANÇA: Renomeado de fromFirestore para fromMap e parâmetros atualizados ---
+  /// Factory constructor para criar uma instância de [Aviso] a partir de um mapa.
   factory Aviso.fromMap(String id, Map<String, dynamic> data) {
     return Aviso(
       id: id,
-      titulo: data['titulo'] ?? '',
+      titulo: data['titulo'] ?? 'Aviso sem título',
       conteudo: data['conteudo'] ?? '',
-      data: data['data'] ?? Timestamp.now(),
+      data: data['data'] as Timestamp? ?? Timestamp.now(),
     );
   }
 }
