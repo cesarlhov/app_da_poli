@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "app_da_poli",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "--no-enable-impeller"
+            ]
+        },
+        {
+            "name": "app_da_poli (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "app_da_poli (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        }
+    ]
+}

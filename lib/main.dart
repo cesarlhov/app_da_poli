@@ -17,7 +17,7 @@ import 'package:app_da_poli/pages/tarefas_page.dart';
 import 'package:app_da_poli/providers/user_provider.dart';
 import 'package:app_da_poli/providers/disciplinas_provider.dart';
 import 'package:app_da_poli/providers/tarefas_provider.dart';
-import 'package:app_da_poli/providers/avisos_provider.dart'; // NOVO IMPORT
+import 'package:app_da_poli/providers/avisos_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,9 +25,22 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:app_da_poli/pages/hub_disciplinas_page.dart';
+import 'package:app_da_poli/pages/signup_page.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // ======= MÁGICA DA TELA INFINITA (Edge-to-Edge) =======
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      systemNavigationBarColor: Colors.transparent, // Deixa a base invisível
+      systemNavigationBarIconBrightness: Brightness.dark,
+      statusBarColor: Colors.transparent, // Deixa o topo invisível
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+  // ======================================================
   await dotenv.load(fileName: ".env");
   
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -92,7 +105,25 @@ GoRouter _createRouter() {
     initialLocation: '/',
     routes: [
       GoRoute(path: '/', builder: (context, state) => const SplashPage()),
-      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      
+      // ======= ROTA DE LOGIN COM FADE PARA A LOGO VOAR =======
+      GoRoute(
+        path: '/login', 
+        pageBuilder: (context, state) {
+          return CustomTransitionPage(
+            key: state.pageKey,
+            child: const LoginPage(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              // Faz a tela anterior sumir suavemente
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 1000), // 1 segundo de voo da Logo!
+          );
+        }
+      ),
+      // ========================================================
+      
+      GoRoute(path: '/signup', builder: (context, state) => const SignupPage()),
       
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),

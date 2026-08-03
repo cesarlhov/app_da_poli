@@ -105,7 +105,7 @@ class _JupiterPageState extends State<JupiterPage> {
     );
   }
 
-  Widget _buildHeader(AppUser user) {
+  Widget _buildHeader(UserModel user) {
     const Color poliBlue = Color(0xFF0460E9);
     const Color poliBlack = Color(0xFF101010);
     const Color poliGrey = Color(0xFFBCBEBF);
@@ -130,7 +130,7 @@ class _JupiterPageState extends State<JupiterPage> {
                 ),
                 const SizedBox(height: 1),
                 Text(
-                  _formatUserName(user.nome),
+                  _formatUserName(user.nomeCompleto),
                   style: headerTextStyle.copyWith(color: poliBlack),
                   overflow: TextOverflow.ellipsis,
                 ),

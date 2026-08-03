@@ -78,8 +78,11 @@ class ProfilePage extends StatelessWidget {
       );
     }
 
-    // A MÁGICA DO CONTROLE DE ACESSO ACONTECE AQUI:
-    final bool isAdmin = user.role == UserRole.gremio || user.role == UserRole.admin || user.role == UserRole.representante;
+    // A MÁGICA NOVA DE CONTROLE DE ACESSO
+    final bool isAdmin = user.isGremio || user.isRC;
+    String cargo = 'ALUNO';
+    if (user.isGremio) cargo = 'GRÊMIO';
+    else if (user.isRC) cargo = 'REPRESENTANTE';
 
     return Scaffold(
       appBar: AppBar(
@@ -105,11 +108,10 @@ class ProfilePage extends StatelessWidget {
               child: Icon(Icons.person, size: 60, color: Colors.white),
             ),
             const SizedBox(height: 16),
-            Text(user.nome, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+            Text(user.nomeCompleto, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
             const SizedBox(height: 4),
-            // Mostra o cargo se for liderança
             Text(
-              isAdmin ? '${user.curso} • ${user.role.name.toUpperCase()}' : user.curso, 
+              isAdmin ? '${user.curso} • $cargo' : user.curso, 
               style: TextStyle(fontSize: 16, color: isAdmin ? const Color(0xFF0D41A9) : Colors.grey, fontWeight: isAdmin ? FontWeight.bold : FontWeight.normal),
               textAlign: TextAlign.center
             ),
@@ -121,7 +123,6 @@ class ProfilePage extends StatelessWidget {
               onPressed: () => showDialog(context: context, builder: (context) => EditProfileDialog(currentUser: user)),
             ),
             
-            // SEÇÃO EXCLUSIVA PARA ADMINS/GRÊMIO
             if (isAdmin) ...[
               const SizedBox(height: 32),
               const Divider(),
@@ -143,7 +144,7 @@ class ProfilePage extends StatelessWidget {
                 label: 'Hub de Disciplinas',
                 icon: Icons.admin_panel_settings_outlined,
                 onPressed: () {
-                   context.push('/hub-disciplinas'); // <-- MUDOU AQUI
+                   context.push('/hub-disciplinas'); 
                 },
               ),
             ]
@@ -161,7 +162,7 @@ class ProfilePage extends StatelessWidget {
         icon: Icon(icon, color: isHighlight ? Colors.white : null),
         label: Text(label, style: TextStyle(color: isHighlight ? Colors.white : null)),
         style: ElevatedButton.styleFrom(
-          backgroundColor: isHighlight ? const Color(0xFF0D41A9) : null, // Cor da Poli se for destaque
+          backgroundColor: isHighlight ? const Color(0xFF0D41A9) : null, 
           padding: const EdgeInsets.symmetric(vertical: 14),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),

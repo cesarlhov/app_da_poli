@@ -29,7 +29,7 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
     }
 
     // Verifica se o usuário tem cargo de edição
-    final bool isAdmin = currentUser.role == UserRole.gremio || currentUser.role == UserRole.admin || currentUser.role == UserRole.representante;
+    final bool isAdmin = currentUser.isGremio || currentUser.isRC;
 
     return Scaffold(
       appBar: AppBar(

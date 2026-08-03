@@ -8,13 +8,12 @@ import 'package:flutter/material.dart';
 
 class UserProvider extends ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
-  StreamSubscription<AppUser?>? _userSubscription;
+  StreamSubscription<UserModel?>? _userSubscription;
 
-  AppUser? _currentUser;
+  UserModel? _currentUser;
   bool _isLoading = true;
 
-  // Acesso seguro de fora da classe
-  AppUser? get currentUser => _currentUser;
+  UserModel? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
 
   UserProvider() {
@@ -22,23 +21,19 @@ class UserProvider extends ChangeNotifier {
   }
 
   void _initAuthListener() {
-    // Fica escutando se o usuário logou ou deslogou do Firebase
     FirebaseAuth.instance.authStateChanges().listen((User? firebaseUser) {
-      // Cancela a escuta anterior para não vazar memória
       _userSubscription?.cancel();
 
       if (firebaseUser != null) {
         _isLoading = true;
-        notifyListeners(); // Avisa a interface que estamos carregando
+        notifyListeners(); 
 
-        // Puxa os dados do aluno logado
-        _userSubscription = _firestoreService.getUserProfile().listen((AppUser? appUser) {
-          _currentUser = appUser;
+        _userSubscription = _firestoreService.getUserProfile().listen((UserModel? userModel) {
+          _currentUser = userModel;
           _isLoading = false;
-          notifyListeners(); // Avisa a interface que os dados chegaram!
+          notifyListeners();
         });
       } else {
-        // Se deslogar, limpa os dados da memória
         _currentUser = null;
         _isLoading = false;
         notifyListeners();

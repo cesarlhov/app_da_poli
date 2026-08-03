@@ -19,23 +19,24 @@ class FirestoreService {
   Future<void> createUserProfile(User user, String nome, String curso, String nusp) async {
     return _db.collection('users').doc(user.uid).set({
       'uid': user.uid,
-      'nome': nome,
+      'nomeCompleto': nome,
+      'nomeUsuario': '', 
       'email': user.email,
       'curso': curso,
-      'nusp': nusp,
-      'role': 'aluno', // Começa como aluno comum
-      'amigosIds': [],
+      'numeroUSP': nusp,
+      'isGremio': false,
+      'isRC': false,
       'turmasIds': [],
-      'visivelParaAmigos': true,
+      'amigosIds': [],
       'criadoEm': FieldValue.serverTimestamp(),
     });
   }
 
-  Stream<AppUser?> getUserProfile() {
+  Stream<UserModel?> getUserProfile() {
     final user = _auth.currentUser;
     if (user == null) return Stream.value(null);
     return _db.collection('users').doc(user.uid).snapshots().map(
-          (doc) => doc.exists ? AppUser.fromMap(doc.id, doc.data()!) : null,
+          (doc) => doc.exists ? UserModel.fromMap(doc.data()!, doc.id) : null,
     );
   }
 

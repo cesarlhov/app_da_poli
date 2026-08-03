@@ -5,7 +5,7 @@ import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 
 class EditProfileDialog extends StatefulWidget {
-  final AppUser currentUser;
+  final UserModel currentUser;
 
   const EditProfileDialog({super.key, required this.currentUser});
 
@@ -23,7 +23,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
   @override
   void initState() {
     super.initState();
-    _nomeController = TextEditingController(text: widget.currentUser.nome);
+    _nomeController = TextEditingController(text: widget.currentUser.nomeCompleto);
     _cursoController = TextEditingController(text: widget.currentUser.curso);
   }
 
@@ -39,7 +39,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
       setState(() => _isLoading = true);
 
       final updatedData = {
-        'nome': _nomeController.text.trim(),
+        'nomeCompleto': _nomeController.text.trim(),
         'curso': _cursoController.text.trim(),
       };
 
@@ -47,7 +47,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
 
       if (mounted) {
         setState(() => _isLoading = false);
-        Navigator.of(context).pop(); // Fecha o diálogo
+        Navigator.of(context).pop(); 
       }
     }
   }
