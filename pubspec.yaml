@@ -35,10 +35,7 @@ flutter:
   assets:
     - assets/fonts/
     - .env
-    - assets/images/logochaska_icon.svg
-    - assets/images/logogoogle_icon.svg
-    - assets/images/logostelainicial_icon.svg
-    - assets/images/estrela_icon.svg
+    - assets/images/
 
   fonts:
     - family: LeagueSpartan

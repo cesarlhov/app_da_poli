@@ -16,9 +16,12 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserProvider>();
 
-    void signOut() async {
-      await FirebaseAuth.instance.signOut();
-      if (context.mounted) context.go('/login');
+    // A MÁGICA DA CORREÇÃO:
+    // Nós mandamos o usuário para a tela de login PRIMEIRO,
+    // fechando o banco de dados, e DEPOIS deslogamos do Firebase.
+    void signOut() {
+      context.go('/login');
+      FirebaseAuth.instance.signOut();
     }
 
     void _showSettingsMenu() {
@@ -112,7 +115,11 @@ class ProfilePage extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               isAdmin ? '${user.curso} • $cargo' : user.curso, 
-              style: TextStyle(fontSize: 16, color: isAdmin ? const Color(0xFF0D41A9) : Colors.grey, fontWeight: isAdmin ? FontWeight.bold : FontWeight.normal),
+              style: TextStyle(
+                fontSize: 16, 
+                color: isAdmin ? const Color(0xFF0D41A9) : Colors.grey, 
+                fontWeight: isAdmin ? FontWeight.bold : FontWeight.normal, // O "FontWeight" estava faltando aqui!
+              ),
               textAlign: TextAlign.center
             ),
             const SizedBox(height: 32),

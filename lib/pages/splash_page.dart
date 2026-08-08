@@ -54,8 +54,8 @@ class _SplashPageState extends State<SplashPage> {
               children: [
                 Hero(
                   tag: 'logo_chaska', 
-                  child: SvgPicture.asset(
-                    'assets/images/logochaska_icon.svg',
+                  child: Image.asset(
+                    'assets/images/logochaska_icon.png',
                     width: 164, 
                   ),
                 ),
@@ -92,8 +92,8 @@ class _SplashPageState extends State<SplashPage> {
               child: AnimatedOpacity(
                 opacity: _hideFooter ? 0.0 : 1.0,
                 duration: const Duration(milliseconds: 700),
-                child: SvgPicture.asset(
-                  'assets/images/logostelainicial_icon.svg',
+                child: Image.asset(
+                  'assets/images/logostelainicial_icon.png',
                   width: 221, 
                 ),
               ),
