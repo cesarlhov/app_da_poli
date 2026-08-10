@@ -22,6 +22,9 @@ dependencies:
   intl: ^0.19.0
   flutter_dotenv: ^6.0.1
   provider: ^6.1.2
+  image_picker: ^1.2.3
+  firebase_storage: ^11.7.7
+  supabase_flutter: ^2.16.0
 
 dev_dependencies:
   flutter_test:
@@ -70,5 +73,13 @@ flutter:
     # <<< NOVA FONTE PARA A ASSINATURA DA TELA DE ABERTURA >>>
     - family: MonumentExtended
       fonts:
+        - asset: assets/fonts/MonumentExtended-Regular.otf
+          weight: 400
+        - asset: assets/fonts/MonumentExtended-Black.ttf
+          weight: 700
         - asset: assets/fonts/MonumentExtended-Ultrabold.otf
           weight: 900
+    - family: PPMonumentExtended
+      fonts:
+        - asset: assets/fonts/PPMonumentExtended-Black.otf
+          weight: 800 

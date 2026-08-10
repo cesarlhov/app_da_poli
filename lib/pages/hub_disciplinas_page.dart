@@ -116,13 +116,19 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: jaInscrito
-                                ? null
-                                : () async {
-                                    await _firestoreService.inscreverEmDisciplina(disciplina.id);
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Inscrito em ${disciplina.codigo} com sucesso!')));
-                                  },
-                            icon: Icon(jaInscrito ? Icons.check : Icons.add),
+                            onPressed: () async {
+                                // 🟢 1. Capture o mensageiro ANTES do await!
+                                final mensageiro = ScaffoldMessenger.of(context); 
+                                
+                                // 2. Faz a chamada no banco
+                                await _firestoreService.inscreverEmDisciplina(disciplina.id);
+                                
+                                // 🟢 3. Use a variável capturada para mostrar o aviso (sem tocar na palavra 'context')
+                                mensageiro.showSnackBar(
+                                  SnackBar(content: Text('Inscrito em ${disciplina.codigo}')),
+                                );
+                              },
+                              icon: Icon(jaInscrito ? Icons.check : Icons.add),
                             label: Text(jaInscrito ? 'Já Inscrito' : 'Inscrever-se'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: jaInscrito ? Colors.green : const Color(0xFF0460E9),

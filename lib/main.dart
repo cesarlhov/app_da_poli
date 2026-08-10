@@ -27,6 +27,7 @@ import 'package:provider/provider.dart';
 import 'package:app_da_poli/pages/hub_disciplinas_page.dart';
 import 'package:app_da_poli/pages/signup_page.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,7 +43,10 @@ void main() async {
   );
   // ======================================================
   await dotenv.load(fileName: ".env");
-  
+  await Supabase.initialize(
+    url: dotenv.env['SUPABASE_URL'] ?? '',
+    anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+  );
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     systemNavigationBarColor: Color(0xFFF0F0F0),
     systemNavigationBarIconBrightness: Brightness.dark,

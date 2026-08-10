@@ -7,6 +7,8 @@ import 'package:app_da_poli/models/tarefa_model.dart';
 import 'package:app_da_poli/models/user_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -30,6 +32,25 @@ class FirestoreService {
       'amigosIds': [],
       'criadoEm': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<void> uploadFotoPerfil(File imageFile) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        // 1. Sobe a foto para o Firebase Storage na pasta 'perfil_fotos'
+        final storageRef = FirebaseStorage.instance.ref().child('perfil_fotos/${user.uid}.jpg');
+        await storageRef.putFile(imageFile);
+
+        // 2. Pega a URL pública da foto
+        final String downloadUrl = await storageRef.getDownloadURL();
+
+        // 3. Atualiza o banco de dados do usuário (Isso vai disparar o Provider para atualizar a tela!)
+        await _db.collection('users').doc(user.uid).update({'fotoUrl': downloadUrl});
+      } catch (e) {
+        throw Exception('Erro ao fazer upload da foto: $e');
+      }
+    }
   }
 
   Stream<UserModel?> getUserProfile() {
@@ -221,6 +242,14 @@ class FirestoreService {
           .set({
         'notasPreenchidas': notasPreenchidas,
       }, SetOptions(merge: true)); // Usa merge para garantir que não sobrescreve o resto do progresso
+    }
+  }
+  Future<void> atualizarFotoPerfilUrl(String fotoUrl) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      await _db.collection('users').doc(user.uid).update({
+        'fotoUrl': fotoUrl,
+      });
     }
   }
 }

@@ -1,5 +1,7 @@
 // lib/models/user_model.dart
 
+enum UserRole { aluno, representante, gremio, admin }
+
 class UserModel {
   final String uid;
   final String nomeCompleto; 
@@ -8,6 +10,7 @@ class UserModel {
   final String numeroUSP; 
   final String? telefone; 
   final String curso;
+  final String? fotoUrl; // ✅ NOVO CAMPO: Link da foto de perfil
   
   // Hierarquia e Poderes
   final bool isGremio; 
@@ -15,17 +18,17 @@ class UserModel {
   
   // Listas de Conexão
   final List<String> turmasGerenciadas; 
-  final List<String> turmasIds; // <-- Adicionado para corrigir o erro
-  final List<String> amigosIds; // <-- Adicionado
+  final List<String> turmasIds; 
+  final List<String> amigosIds; 
   
-  // Gamificação
+  // Gamificação e Configurações
   final int xp;
   final String tituloAtual;
   final List<String> insignias;
-  
-  // Configurações
   final bool aceitouTermos;
   final String visibilidadePerfil;
+
+  String get nome => nomeCompleto;
 
   UserModel({
     required this.uid,
@@ -35,6 +38,7 @@ class UserModel {
     required this.numeroUSP,
     this.telefone,
     required this.curso,
+    this.fotoUrl, // ✅ INCLUÍDO AQUI
     this.isGremio = false,
     this.isRC = false,
     this.turmasGerenciadas = const [],
@@ -50,13 +54,13 @@ class UserModel {
   factory UserModel.fromMap(Map<String, dynamic> map, String documentId) {
     return UserModel(
       uid: documentId,
-      // O '??' garante que se for um usuário antigo, o app não quebre!
       nomeCompleto: map['nomeCompleto'] ?? map['nome'] ?? '',
       nomeUsuario: map['nomeUsuario'] ?? '',
       email: map['email'] ?? '',
       numeroUSP: map['numeroUSP'] ?? map['nusp'] ?? '',
       telefone: map['telefone'],
       curso: map['curso'] ?? 'Não informado',
+      fotoUrl: map['fotoUrl'], // ✅ PUXA DO BANCO
       isGremio: map['isGremio'] ?? (map['role'] == 'gremio' || map['role'] == 'admin'),
       isRC: map['isRC'] ?? (map['role'] == 'representante'),
       turmasGerenciadas: List<String>.from(map['turmasGerenciadas'] ?? []),
@@ -78,6 +82,7 @@ class UserModel {
       'numeroUSP': numeroUSP,
       'telefone': telefone,
       'curso': curso,
+      'fotoUrl': fotoUrl, // ✅ SALVA NO BANCO
       'isGremio': isGremio,
       'isRC': isRC,
       'turmasGerenciadas': turmasGerenciadas,

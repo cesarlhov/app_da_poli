@@ -1,8 +1,8 @@
 // lib/components/slidable_grade_preview.dart
 
+import 'dart:math';
 import 'package:app_da_poli/components/dotted_container.dart';
 import 'package:app_da_poli/models/disciplina_model.dart';
-import 'package:app_da_poli/pages/edit_grade_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
@@ -10,17 +10,24 @@ import 'package:go_router/go_router.dart';
 class SlidableGradePreview extends StatefulWidget {
   final List<Disciplina> disciplinas;
   final VoidCallback onGradeEdited;
-  final double alturaManha;
-  final double alturaAlmocoOuVao;
-  final double alturaTarde;
+  final VoidCallback? onShrink;
+  
+  final double scrollProgress;
+  final double shrinkValue;
+  final double espacoGradeAteArraste;
+  final double espacoArrasteAteBase;
+  final double espacoBaseSemFooter; 
 
   const SlidableGradePreview({
     super.key,
     required this.disciplinas,
     required this.onGradeEdited,
-    required this.alturaManha,
-    required this.alturaAlmocoOuVao,
-    required this.alturaTarde,
+    this.onShrink,
+    this.scrollProgress = 0.0,
+    this.shrinkValue = 0.0,
+    this.espacoGradeAteArraste = 6.0,
+    this.espacoArrasteAteBase = 15.0,
+    this.espacoBaseSemFooter = 16.0,
   });
 
   @override
@@ -34,10 +41,13 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
+    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+    
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && widget.onShrink != null) {
+        widget.onShrink!();
+      }
+    });
   }
 
   @override
@@ -45,31 +55,16 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
     _animationController.dispose();
     super.dispose();
   }
-  
+
   void closeMenu() {
-    if (_animationController.value != 0.0) {
-      _animationController.reverse();
-    }
+    if (_animationController.value != 0.0) _animationController.reverse();
   }
-  
+
   void _navigateToEditPage() async {
     closeMenu();
     await Future.delayed(const Duration(milliseconds: 210));
-    
     if (mounted) {
-      // Cria um mapa com todos os dados necessários para a próxima tela
-      final extraData = {
-        'disciplinas': widget.disciplinas,
-        'metrics': {
-          'alturaManha': widget.alturaManha,
-          'alturaAlmocoOuVao': widget.alturaAlmocoOuVao,
-          'alturaTarde': widget.alturaTarde,
-        }
-      };
-      
-      context.push('/edit-grade', extra: extraData).then((_) {
-        widget.onGradeEdited();
-      });
+      context.push('/edit-grade', extra: {'disciplinas': widget.disciplinas}).then((_) => widget.onGradeEdited());
     }
   }
 
@@ -79,11 +74,8 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
   }
 
   void _handleDragEnd(DragEndDetails details) {
-    if (_animationController.value > 0.5) {
-      _animationController.forward();
-    } else {
-      _animationController.reverse();
-    }
+    if (_animationController.value > 0.5) _animationController.forward();
+    else _animationController.reverse();
   }
 
   @override
@@ -91,7 +83,10 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
     return Stack(
       alignment: Alignment.centerRight,
       children: [
-        _buildRevealOptions(),
+        Positioned(
+          top: 0, bottom: 0, right: 0,
+          child: _buildRevealOptions(),
+        ),
         GestureDetector(
           onHorizontalDragUpdate: _handleDragUpdate,
           onHorizontalDragEnd: _handleDragEnd,
@@ -99,16 +94,17 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
             animation: _animationController,
             builder: (context, child) {
               final offset = _animationController.value * _revealWidth;
-              return Transform.translate(
-                offset: Offset(-offset, 0),
-                child: child,
-              );
+              return Transform.translate(offset: Offset(-offset, 0), child: child);
             },
-            child: Hero(
-              tag: 'grade-hero',
-              child: Material(
-                type: MaterialType.transparency,
-                child: _buildGradeContainer(context),
+            child: Material(
+              type: MaterialType.transparency,
+              child: _MiniGradePreview(
+                disciplinas: widget.disciplinas,
+                scrollProgress: widget.scrollProgress,
+                shrinkValue: widget.shrinkValue,
+                espacoGradeAteArraste: widget.espacoGradeAteArraste,
+                espacoArrasteAteBase: widget.espacoArrasteAteBase,
+                espacoBaseSemFooter: widget.espacoBaseSemFooter, 
               ),
             ),
           ),
@@ -116,58 +112,19 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
       ],
     );
   }
-  
+
   Widget _buildRevealOptions() {
     return Container(
       width: _revealWidth + 20,
-      decoration: BoxDecoration(
-        color: const Color(0xFF5E6982),
-        borderRadius: BorderRadius.circular(11),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF5E6982), borderRadius: BorderRadius.circular(8.0)),
       child: Padding(
         padding: const EdgeInsets.only(left: 10.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            IconButton(
-              icon: SvgPicture.asset(
-                'assets/images/editar_icon.svg',
-                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                width: 28,
-              ),
-              onPressed: _navigateToEditPage,
-            ),
-            IconButton(
-              icon: SvgPicture.asset(
-                'assets/images/baixar_icon.svg',
-                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                width: 28,
-              ),
-              onPressed: () {},
-            ),
+            IconButton(icon: SvgPicture.asset('assets/images/editar_icon.svg', colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn), width: 28), onPressed: _navigateToEditPage),
+            IconButton(icon: SvgPicture.asset('assets/images/baixar_icon.svg', colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn), width: 28), onPressed: () {}),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGradeContainer(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(3.0),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(11),
-        gradient: const LinearGradient(colors: [Color(0xFF0460E9), Color(0xFF0D41A9)]),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: _MiniGradePreview(
-          disciplinas: widget.disciplinas,
-          alturaManha: widget.alturaManha,
-          alturaAlmocoOuVao: widget.alturaAlmocoOuVao,
-          alturaTarde: widget.alturaTarde,
         ),
       ),
     );
@@ -176,201 +133,337 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
 
 class _MiniGradePreview extends StatelessWidget {
   final List<Disciplina> disciplinas;
-  final double alturaManha;
-  final double alturaAlmocoOuVao;
-  final double alturaTarde;
-
-  const _MiniGradePreview({
-    required this.disciplinas,
-    required this.alturaManha,
-    required this.alturaAlmocoOuVao,
-    required this.alturaTarde,
-  });
+  final double scrollProgress;
+  final double shrinkValue; 
+  final double espacoGradeAteArraste;
+  final double espacoArrasteAteBase;
+  final double espacoBaseSemFooter;
   
-  static const double _duracaoManhaMin = 210;
-  static const double _duracaoAlmocoMin = 130;
-  static const double _duracaoTardeMin = 220;
-  static const double _duracaoTardeNoiteMin = 340;
+  const _MiniGradePreview({
+    required this.disciplinas, 
+    this.scrollProgress = 0.0, 
+    this.shrinkValue = 0.0, 
+    this.espacoGradeAteArraste = 6.0,
+    this.espacoArrasteAteBase = 15.0,
+    this.espacoBaseSemFooter = 16.0
+  });
+
+  double get _escalaAlturaGrade => (1.0 - scrollProgress * 0.5).clamp(0.5, 1.0); 
+
+  double get alturaManhaPadrao => 64.0 * _escalaAlturaGrade; 
+  double get minutosManhaPadrao => 210.0; 
+  double get pixelsPorMinuto => alturaManhaPadrao / minutosManhaPadrao; 
+
+  final double espacoTopoAteTitulo = 12.0;
+  final double espacoTituloAteGrade = 4.0;
+  final double espacoAcimaLinha = 6.0;
+  final double espacoAbaixoLinha = 6.0;
+
+  final double tamanhoTitulo = 19.0;
+  final double tamanhoCreditos = 19.0;
+
+  final bool _usarLarguraFixaColuna = false; 
+  final double _larguraFixaColunaPadrao = 45.0; 
+
+  final double _espessuraBorda = 1.5; 
+  final double _raioBorda = 8.0;
+  final Color _corBordaInicio = const Color(0xFF0460E9);
+  final Color _corBordaFim = const Color(0xFF0D41A9);
+  final Color _corFundoInterno = const Color(0xFFF0F0F0);
+
+  final double _paddingLateralGrade = 12.0; 
+  final double _espacoEntreColunas = 7.0;
+
+  final Color _corTitulo = const Color(0xFF0460E9);
+  final Color _corArraste = const Color(0xFFBCBEBF);
+  final double _linhaAlmocoEspessura = 4.0;
+  final double _pontilhadoEspessura = 1.5;
+  final double _pontilhadoRaio = 6.0;
+  final double _pontilhadoTraco = 2.0;
+  final double _pontilhadoEspaco = 2.0;
+  final Color _corGradeLinha = const Color(0xFFBFC5D1);
+  final Color _corFundoCard = const Color(0xFFDEE2EC);
+
+  // =========================================================================
+  // 🎛️ PAINEL DE CONTROLE - BLOQUINHOS DAS DISCIPLINAS
+  // =========================================================================
+  final double _tamanhoTextoBloco = 15.0; 
+  final FontWeight _pesoFonteBloco = FontWeight.w700; // Alterado para 700 
+  final double _opacidadeTextoBloco = 0.5; 
+  final Color _corTextoBloco = const Color(0xFFF0F0F0); // A cor exata de off-white solicitada!
+  final double _paddingTopTextoBloco = 8.0; // Distância topo atualizada
+  
+  // Cores fixas
+  final Color _corEspecialPQI = const Color(0xFF284ACE); // Azul fixo do PQI solicitado
+  // =========================================================================
+
+  int _timeToMin(String time) {
+    if (time.isEmpty || !time.contains(':')) return 0;
+    try {
+      final parts = time.split(':');
+      return int.parse(parts[0].trim()) * 60 + int.parse(parts[1].trim());
+    } catch (e) {
+      return 0;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    const double headerHeight = 30.0;
-    const double topSpacing = 10.0;
-    const double footerHeight = 20.0;
-    const double bottomSpacing = 8.0;
+    final double alturaTextoArraste = 14.0; 
+    final double openHeight = espacoGradeAteArraste + alturaTextoArraste + espacoArrasteAteBase;
+    final double closedHeight = espacoBaseSemFooter;
+    final double currentFooterHeight = (openHeight * (1 - shrinkValue)) + (closedHeight * shrinkValue);
 
-    return Stack(
-      children: [
-        Padding(
-          padding: EdgeInsets.only(
-            top: headerHeight + topSpacing,
-            left: 9.72,
-            right: 9.72,
-            bottom: footerHeight + bottomSpacing,
+    return CustomPaint(
+      foregroundPainter: _GradientBorderPainter(
+        strokeWidth: _espessuraBorda,
+        radius: _raioBorda,
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [_corBordaInicio, _corBordaFim]),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_raioBorda - (_espessuraBorda / 2)),
+        child: Container(
+          color: _corFundoInterno,
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min, 
+              children: [
+                _buildHeader(),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: _paddingLateralGrade),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return _buildGridEngine(constraints); 
+                    },
+                  ),
+                ),
+                SizedBox(
+                  height: currentFooterHeight, 
+                  child: Align(
+                    alignment: Alignment.topRight,
+                    child: Opacity(
+                      opacity: (1 - (shrinkValue * 1.5)).clamp(0.0, 1.0), 
+                      child: Padding(
+                        padding: EdgeInsets.only(top: espacoGradeAteArraste, right: _paddingLateralGrade),
+                        child: Text('< ARRASTE PARA EDITAR', style: TextStyle(fontFamily: 'Lato', fontStyle: FontStyle.italic, color: _corArraste, fontSize: 12.0, fontWeight: FontWeight.w900)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: _buildBackgroundColumns(context),
         ),
-        Positioned.fill(
-          child: _buildPositionedDisciplines(context),
-        ),
-        _buildHeadersAndFooters(),
-      ],
+      ),
     );
   }
 
-  Widget _buildHeadersAndFooters() {
+  Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(9.7, 5, 9.7, 6),
-      child: Column(
+      padding: EdgeInsets.only(top: espacoTopoAteTitulo, bottom: espacoTituloAteGrade, left: _paddingLateralGrade, right: _paddingLateralGrade),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('GRADE HORÁRIA', style: TextStyle(fontFamily: 'AristotelicaProDisplay', fontSize: 23, fontWeight: FontWeight.bold, color: Color(0xFF0460E9))),
-              Text('III Č', style: TextStyle(fontFamily: 'AristotelicaProDisplay', fontSize: 23, fontWeight: FontWeight.bold, color: Color(0xFF0460E9))),
-            ],
-          ),
-          const Spacer(),
-          const Align(
-            alignment: Alignment.centerRight,
-            child: Text('< ARRASTE PARA EDITAR', style: TextStyle(fontFamily: 'Lato', fontStyle: FontStyle.italic, color: Color(0xFFBCBEBF), fontSize: 12, fontWeight: FontWeight.bold)),
-          ),
+          Text('GRADE HORÁRIA', style: TextStyle(fontFamily: 'Aristotelica', fontSize: tamanhoTitulo, fontWeight: FontWeight.w700, color: _corTitulo)),
+          Text('24 Č', style: TextStyle(fontFamily: 'Aristotelica', fontSize: tamanhoCreditos, fontWeight: FontWeight.w700, color: _corTitulo)),
         ],
       ),
     );
   }
 
-  Widget _buildBackgroundColumns(BuildContext context) {
-    final dias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-    const corFundo = Color(0xFFdee2ec);
-    const corBorda = Color(0xFFbfc5d1);
-    const espessuraBorda = 2.0;
-    final borderRadius = BorderRadius.circular(4);
+  Widget _buildGridEngine(BoxConstraints constraints) {
+    int minMins = 450; 
+    int maxMins = 1000; 
+    List<bool> dayHasLunch = List.filled(5, false);
 
-    bool temAulaNoAlmoco(String dia) {
-      for (var disciplina in disciplinas) {
-        if (disciplina.diasDaSemana.contains(dia)) {
-          if (_isDuringLunch(disciplina)) return true;
+    for (var d in disciplinas) {
+      int start = _timeToMin(d.horarioInicio);
+      int end = _timeToMin(d.horarioFim);
+      if (start == 0 || end == 0) continue;
+
+      if (start < minMins) minMins = start;
+      if (end > maxMins) maxMins = end;
+
+      if (start < 790 && end > 660) {
+        for (String dia in d.diasDaSemana) {
+          int index = ['Segunda','Terça','Quarta','Quinta','Sexta'].indexOf(dia);
+          if (index != -1) dayHasLunch[index] = true;
         }
       }
-      return false;
     }
 
-    Widget buildStyledBlock(double height, {bool isVisible = true}) {
-      if (!isVisible) return SizedBox(height: height);
+    double extraTop = (450 - minMins) > 0 ? (450 - minMins) * pixelsPorMinuto : 0.0;
+    double extraBottom = (maxMins > 1000) ? (maxMins - 1000) * pixelsPorMinuto : 0.0;
+    
+    double alturaManha = 210 * pixelsPorMinuto;
+    double alturaTarde = 210 * pixelsPorMinuto;
+    double alturaAlmoco = espacoAcimaLinha + _linhaAlmocoEspessura + espacoAbaixoLinha; 
+    
+    double totalGridHeight = extraTop + alturaManha + alturaAlmoco + alturaTarde + extraBottom;
+
+    double timeToY(int t) {
+      if (t <= 660) {
+        return extraTop + (t - 450) * pixelsPorMinuto;
+      } else if (t >= 790) {
+        return extraTop + alturaManha + alturaAlmoco + (t - 790) * pixelsPorMinuto;
+      } else {
+        return extraTop + alturaManha + ((t - 660) / 130.0) * alturaAlmoco;
+      }
+    }
+
+    double availableWidth = max(0.0, constraints.maxWidth);
+    double autoColWidth = max(0.0, (availableWidth - (4 * _espacoEntreColunas)) / 5);
+    double colWidth = _usarLarguraFixaColuna ? _larguraFixaColunaPadrao : autoColWidth;
+    double totalGridWidth = (colWidth * 5) + (4 * _espacoEntreColunas);
+
+    Widget buildDottedBox(double h) {
       return SizedBox(
-        height: height,
+        height: max(0.0, h),
         child: DottedContainer(
-          borderColor: corBorda,
-          strokeWidth: espessuraBorda,
-          borderRadius: borderRadius,
-          color: corFundo,
-          dashPattern: const [3, 2],
-          child: Container(width: double.infinity, decoration: BoxDecoration(borderRadius: borderRadius)),
+          borderColor: _corGradeLinha,
+          strokeWidth: _pontilhadoEspessura,
+          borderRadius: BorderRadius.circular(_pontilhadoRaio),
+          color: _corFundoCard.withOpacity(0.5),
+          dashPattern: [_pontilhadoTraco, _pontilhadoEspaco],
+          child: Container(),
         ),
       );
     }
 
-    final double availableWidth = MediaQuery.of(context).size.width - 2 * 14.6 - (2 * 9.72) - 6;
-    final double colSpacing = 6.94;
-    final double colWidth = (availableWidth - (4 * colSpacing)) / 5;
+    List<Widget> classBlocks = [];
     
-    final totalBlockHeight = alturaManha + alturaAlmocoOuVao + alturaTarde;
-    final verticalSpacing = ((alturaManha + alturaAlmocoOuVao + alturaTarde) - totalBlockHeight) / 2;
+    // 🟢 MATEMÁTICA DO ESMAECIMENTO INTERATIVO: 
+    // scrollProgress vai de 0.0 (aberto) a 1.0 (fechado/achatado).
+    // Queremos que o texto atinja opacidade ZERO quando a grade chegar aos 35% do achatamento máximo (ou seja, scrollProgress == 0.70).
+    // Assim, ao rolar e desrolar, a física é revertida com perfeição fluida!
+    double fadeOutTexto = (1.0 - (scrollProgress / 0.70)).clamp(0.0, 1.0);
 
-    List<Widget> rowChildren = [];
-    for (int i = 0; i < dias.length; i++) {
-      final dia = dias[i];
-      final bool mostrarFundoAlmoco = temAulaNoAlmoco(dia);
+    for (var d in disciplinas) {
+      int start = _timeToMin(d.horarioInicio);
+      int end = _timeToMin(d.horarioFim);
+      if (start == 0 || end == 0) continue; 
 
-      rowChildren.add(SizedBox(
-        width: colWidth,
-        child: Column(
-          children: [
-            buildStyledBlock(alturaManha),
-            SizedBox(height: verticalSpacing),
-            buildStyledBlock(alturaAlmocoOuVao, isVisible: mostrarFundoAlmoco),
-            SizedBox(height: verticalSpacing),
-            buildStyledBlock(alturaTarde),
-          ],
-        ),
-      ));
-      if (i < dias.length - 1) rowChildren.add(SizedBox(width: colSpacing));
-    }
-    return Row(children: rowChildren);
-  }
-  
-  Widget _buildPositionedDisciplines(BuildContext context) {
-    final temAulaNoite = disciplinas.any(_isAfterHours);
-    final double duracaoTardeAtual = temAulaNoite ? _duracaoTardeNoiteMin : _duracaoTardeMin;
-    final double pxPerMinManha = alturaManha / _duracaoManhaMin;
-    final double pxPerMinAlmoco = alturaAlmocoOuVao / _duracaoAlmocoMin;
-    final double pxPerMinTarde = alturaTarde / duracaoTardeAtual;
-    const double inicioManhaMin = 450;
-    const double inicioAlmocoMin = 660;
-    const double inicioTardeMin = 790;
-    final dias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
-    final double availableWidth = MediaQuery.of(context).size.width - 2 * 14.6 - (2 * 9.72) - 6;
-    final double colSpacing = 6.94;
-    final double colWidth = (availableWidth - (4 * colSpacing)) / 5;
-    List<Widget> positionedDisciplines = [];
+      double top = max(0.0, timeToY(start)); 
+      double height = max(0.0, timeToY(end) - top); 
+      
+      // 🟢 MAGIA DA SIGLA: Pega o "PQI3305" e arranca os números fora, mantendo só as letras ("PQI").
+      String siglaPura = d.codigo.replaceAll(RegExp(r'[^A-Za-z]'), '').toUpperCase();
+      
+      // Regra de Cor: Se for PQI, força o azul novo, senão usa a cor do banco.
+      Color corBloco = siglaPura == 'PQI' ? _corEspecialPQI : d.cor;
 
-    for (var disciplina in disciplinas) {
-      try {
-        final inicioMinutosTotal = _timeToMinutes(disciplina.horarioInicio);
-        final fimMinutosTotal = _timeToMinutes(disciplina.horarioFim);
-        double top, pixelsPerMinute;
-
-        if (inicioMinutosTotal < inicioAlmocoMin) {
-          pixelsPerMinute = pxPerMinManha;
-          top = (inicioMinutosTotal - inicioManhaMin) * pixelsPerMinute;
-        } else if (inicioMinutosTotal < inicioTardeMin) {
-          pixelsPerMinute = pxPerMinAlmoco;
-          top = alturaManha + (inicioMinutosTotal - inicioAlmocoMin) * pixelsPerMinute;
-        } else {
-          pixelsPerMinute = pxPerMinTarde;
-          top = alturaManha + alturaAlmocoOuVao + (inicioMinutosTotal - inicioTardeMin) * pixelsPerMinute;
+      for (String dia in d.diasDaSemana) {
+        int diaIndex = ['Segunda','Terça','Quarta','Quinta','Sexta'].indexOf(dia);
+        if (diaIndex != -1) {
+          classBlocks.add(
+            Positioned(
+              top: top, left: diaIndex * (colWidth + _espacoEntreColunas), width: colWidth, height: height,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
+                decoration: BoxDecoration(color: corBloco, borderRadius: BorderRadius.circular(_pontilhadoRaio)),
+                alignment: Alignment.topCenter,
+                padding: EdgeInsets.only(top: _paddingTopTextoBloco * _escalaAlturaGrade), // O padding espreme junto
+                child: Opacity(
+                  opacity: (fadeOutTexto * _opacidadeTextoBloco).clamp(0.0, 1.0), // 🟢 Aplicação fluida da rolagem
+                  child: Text(
+                    siglaPura, // Imprime 'PQI', 'MAT', 'PRO', etc.
+                    style: TextStyle(
+                      fontFamily: 'Aristotelica', 
+                      fontWeight: _pesoFonteBloco, 
+                      fontSize: _tamanhoTextoBloco * _escalaAlturaGrade, // A fonte espreme em sincronia
+                      color: _corTextoBloco,
+                      height: 1.0, // Retira espaços extras invisíveis do topo da fonte
+                    )
+                  ),
+                ),
+              )
+            )
+          );
         }
+      }
+    }
 
-        final double height = (fimMinutosTotal - inicioMinutosTotal) * pixelsPerMinute;
-        for (String dia in disciplina.diasDaSemana) {
-          final int diaIndex = dias.indexOf(dia);
-          if (diaIndex != -1) {
-            final double left = 9.72 + (diaIndex * colWidth) + (diaIndex * colSpacing);
-            positionedDisciplines.add(
-              Positioned(
-                top: top + 30.0 + 10.0,
-                left: left,
-                width: colWidth,
-                height: height,
-                child: Container(
-                  margin: const EdgeInsets.all(0.5),
-                  decoration: BoxDecoration(color: disciplina.cor, borderRadius: BorderRadius.circular(4)),
+    List<Widget> lineSegments = [];
+    int startIdx = -1;
+    for (int i = 0; i <= 5; i++) {
+      if (i < 5 && !dayHasLunch[i]) {
+        if (startIdx == -1) startIdx = i; 
+      } else {
+        if (startIdx != -1) {
+          double leftPos = startIdx * (colWidth + _espacoEntreColunas);
+          int count = i - startIdx;
+          double lineWidth = max(0.0, (count * colWidth) + ((count - 1) * _espacoEntreColunas));
+          
+          lineSegments.add(
+            Positioned(
+              left: leftPos,
+              width: lineWidth,
+              top: extraTop + alturaManha + espacoAcimaLinha, 
+              height: _linhaAlmocoEspessura,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _corGradeLinha,
+                  borderRadius: BorderRadius.circular(_linhaAlmocoEspessura / 2),
                 ),
               ),
-            );
-          }
+            )
+          );
+          startIdx = -1;
         }
-      } catch (e) { /* Ignora erros */ }
+      }
     }
-    return Stack(children: positionedDisciplines);
+
+    return SizedBox(
+      height: max(0.0, totalGridHeight), 
+      child: Align(
+        alignment: Alignment.center, 
+        child: SizedBox(
+          width: totalGridWidth,
+          child: Stack(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(5, (i) {
+                  return SizedBox(
+                    width: colWidth,
+                    child: Column(
+                      children: [
+                        if (extraTop > 0) SizedBox(height: extraTop),
+                        dayHasLunch[i] ? buildDottedBox(alturaManha + alturaAlmoco + alturaTarde) : buildDottedBox(alturaManha),
+                        if (!dayHasLunch[i]) SizedBox(height: alturaAlmoco),
+                        if (!dayHasLunch[i]) buildDottedBox(alturaTarde),
+                        if (extraBottom > 0) SizedBox(height: extraBottom),
+                      ],
+                    )
+                  );
+                }),
+              ),
+              ...lineSegments, 
+              ...classBlocks,
+            ],
+          ),
+        ),
+      ),
+    );
   }
-  
-  int _timeToMinutes(String time) {
-    try {
-      final parts = time.split(':');
-      return int.parse(parts[0]) * 60 + int.parse(parts[1]);
-    } catch (e) { return 0; }
+}
+
+class _GradientBorderPainter extends CustomPainter {
+  final double strokeWidth;
+  final double radius;
+  final Gradient gradient;
+
+  _GradientBorderPainter({required this.strokeWidth, required this.radius, required this.gradient});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect rect = Rect.fromLTWH(strokeWidth / 2, strokeWidth / 2, size.width - strokeWidth, size.height - strokeWidth);
+    final RRect rRect = RRect.fromRectAndRadius(rect, Radius.circular(radius - (strokeWidth / 2)));
+    final Paint paint = Paint()..shader = gradient.createShader(rect)..strokeWidth = strokeWidth..style = PaintingStyle.stroke;
+    canvas.drawRRect(rRect, paint);
   }
 
-  bool _isDuringLunch(Disciplina d) {
-    final inicio = _timeToMinutes(d.horarioInicio);
-    final fim = _timeToMinutes(d.horarioFim);
-    return fim > 660 && inicio < 790;
-  }
-
-  bool _isAfterHours(Disciplina d) {
-    final fim = _timeToMinutes(d.horarioFim);
-    return fim > 1010;
-  }
+  @override
+  bool shouldRepaint(covariant _GradientBorderPainter old) => old.strokeWidth != strokeWidth || old.radius != radius || old.gradient != gradient;
 }

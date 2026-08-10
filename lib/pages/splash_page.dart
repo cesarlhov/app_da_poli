@@ -1,8 +1,7 @@
 // lib/pages/splash_page.dart
 
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:app_da_poli/services/auth_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 class SplashPage extends StatefulWidget {
@@ -13,7 +12,20 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage> {
+
+  // =========================================================================
+  // 🎛️ PAINEL DE CONTROLE DE MEDIDAS (TELA DE ABERTURA)
+  // =========================================================================
+  final double _tamanhoLogo = 170.0; 
+  final double _deslocamentoVerticalCentro = 0.0; 
+  final double _distanciaBaixoAssinatura = -25.0; 
+  final double _distanciaDireitaAssinatura = 23.0; 
+  final double _tamanhoLogosRodape = 225.0;
+  final double _distanciaRodapeAteBaseSegura = 30.0; 
+  // =========================================================================
+
   bool _hideFooter = false;
+  final AuthService _authService = AuthService(); // Nosso carteiro de Auth
 
   @override
   void initState() {
@@ -22,17 +34,16 @@ class _SplashPageState extends State<SplashPage> {
   }
 
   Future<void> _redirect() async {
-    // Aguarda o tempo inicial da splash (ex: 1800ms)
     await Future.delayed(const Duration(milliseconds: 1800));
     if (mounted) {
       setState(() {
-        _hideFooter = true; // Inicia o esmaecimento dos ícones do rodapé e assinatura
+        _hideFooter = true; 
       });
-      // Aguarda 400ms para os ícones sumirem completamente antes de trocar de tela
       await Future.delayed(const Duration(milliseconds: 400));
     }
     if (mounted) {
-      final user = FirebaseAuth.instance.currentUser;
+      // ✅ A tela pergunta ao Service quem está logado
+      final user = _authService.currentUser;
       if (user == null) {
         context.go('/login');
       } else {
@@ -45,61 +56,60 @@ class _SplashPageState extends State<SplashPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          // CENTRO: Logo Ch'aska + Assinatura atrelada
-          Center(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Hero(
-                  tag: 'logo_chaska', 
-                  child: Image.asset(
-                    'assets/images/logochaska_icon.png',
-                    width: 164, 
-                  ),
-                ),
-                // Assinatura some junto com o rodapé
-                Positioned(
-                  right: 23,  
-                  bottom: -15, 
-                  child: AnimatedOpacity(
-                    opacity: _hideFooter ? 0.0 : 1.0,
-                    duration: const Duration(milliseconds: 350),
-                    child: const Text(
-                      "POR\nCESAR HOV",
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontFamily: 'MonumentExtended',
-                        fontSize: 8,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF444E75), 
-                        height: 0.87,
+      body: SafeArea( 
+        child: Column(
+          children: [
+            Expanded(
+              child: Center( 
+                child: Transform.translate(
+                  offset: Offset(0, _deslocamentoVerticalCentro),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Hero(
+                        tag: 'logo_chaska', 
+                        child: Image.asset(
+                          'assets/images/logochaska_icon.png',
+                          width: _tamanhoLogo, 
+                        ),
                       ),
-                    ),
+                      Positioned(
+                        right: _distanciaDireitaAssinatura,  
+                        bottom: _distanciaBaixoAssinatura, 
+                        child: AnimatedOpacity(
+                          opacity: _hideFooter ? 0.0 : 1.0,
+                          duration: const Duration(milliseconds: 350),
+                          child: const Text(
+                            "POR\nCESAR HOV",
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontFamily: 'MonumentExtended',
+                              fontSize: 8,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF444E75), 
+                              height: 0.87,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-          
-          // RODAPÉ: Logos Institucionais que somem antes da logo voar
-          Positioned(
-            bottom: 34, 
-            left: 0,
-            right: 0,
-            child: Center(
+            Padding(
+              padding: EdgeInsets.only(bottom: _distanciaRodapeAteBaseSegura),
               child: AnimatedOpacity(
                 opacity: _hideFooter ? 0.0 : 1.0,
                 duration: const Duration(milliseconds: 700),
                 child: Image.asset(
                   'assets/images/logostelainicial_icon.png',
-                  width: 221, 
+                  width: _tamanhoLogosRodape, 
                 ),
               ),
             ),
-          )
-        ],
+          ],
+        ),
       ),
     );
   }
