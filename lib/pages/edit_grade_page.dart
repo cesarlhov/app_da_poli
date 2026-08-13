@@ -1,5 +1,3 @@
-// lib/views/edit_grade_page.dart
-
 import 'dart:async';
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:flutter/material.dart';
@@ -24,7 +22,7 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
   late List<Disciplina> _disciplinas;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
-  
+
   @override
   void initState() {
     super.initState();
@@ -47,7 +45,7 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
     _fadeController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

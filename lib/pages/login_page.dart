@@ -22,7 +22,7 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
   final double _tamanhoLogo = 112.0;
   final double _espacoCimaLogo = 108.0; 
   final double _espacoBaixoLogo = 24.0; 
-  final double _tamanhoFonteTitulo = 18.5; 
+  final double _tamanhoFonteTitulo = 18.0; 
   final double _espacoTituloCaixa = 3.0; 
   final double _tamanhoFonteDigitada = 19.0; 
   final double _tamanhoFonteDica = 19.0; 

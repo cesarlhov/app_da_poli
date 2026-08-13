@@ -22,7 +22,7 @@ class _SignupPageState extends State<SignupPage> with SingleTickerProviderStateM
   final double _tamanhoLogo = 112.0;
   final double _espacoCimaLogo = 13.0; 
   final double _espacoBaixoLogo = 20.0; 
-  final double _tamanhoFonteTitulo = 18.5; 
+  final double _tamanhoFonteTitulo = 18.0; 
   final double _espacoTituloCaixa = 3.0; 
   final double _tamanhoFonteDigitada = 19.0; 
   final double _tamanhoFonteDica = 19.0; 

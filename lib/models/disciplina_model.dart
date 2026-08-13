@@ -4,68 +4,143 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class Disciplina {
-  final String id;
-  final String nome;
-  final String codigo; // Ex: PME3380
-  final String departamento;
-  final String local; // Substitui 'sala'
-  final List<String> diasDaSemana;
-  final String horarioInicio;
-  final String horarioFim;
-  final Color cor; 
-  
-  // --- DADOS ACADÊMICOS ---
-  final String ementa;
-  final List<String> docentes;
-  final List<String> monitores;
-  
-  // --- AVALIAÇÃO E CALENDÁRIO ---
-  final String formulaAvaliacao; 
-  final List<String> variaveisAvaliacao; 
-  final Timestamp dataInicio; 
-  final Timestamp dataFim; 
-  final int totalAulasEstimadas; 
-  
-  // --- SOCIAL E GERÊNCIA ---
-  final int numeroInscritos; 
-  final String rcId; 
-  final bool isVerificada;
+class HorarioAula {
+  final String dia; // Ex: SEGUNDA
+  final String inicio; // Ex: 07:30
+  final String fim; // Ex: 09:10
+  final String local;
+  final bool isLaboratorio;
+  final int frequenciaLab; // 0=Semanal, 1=Quinzenal 1, 2=Quinzenal 2, 3=Custom
+  final List<String> datasCustomizadas; // Datas do calendário salvas em ISO (YYYY-MM-DD)
+  final bool precisaEpi;
+  final List<String> epis;
 
-  const Disciplina({
-    required this.id,
-    required this.nome,
-    required this.codigo,
-    required this.departamento,
+  HorarioAula({
+    required this.dia,
+    required this.inicio,
+    required this.fim,
     required this.local,
-    required this.diasDaSemana,
-    required this.horarioInicio,
-    required this.horarioFim,
-    required this.cor,
-    this.ementa = '',
-    this.docentes = const [],
-    this.monitores = const [],
-    this.formulaAvaliacao = 'M = (P1 + P2)/2',
-    this.variaveisAvaliacao = const ['P1', 'P2'],
-    required this.dataInicio,
-    required this.dataFim,
-    required this.totalAulasEstimadas,
-    this.numeroInscritos = 0,
-    this.rcId = '',
-    this.isVerificada = false,
+    required this.isLaboratorio,
+    required this.frequenciaLab,
+    required this.datasCustomizadas,
+    required this.precisaEpi,
+    required this.epis,
   });
 
-  static Color _obterCorDoDepartamento(String depto) {
-    const Map<String, Color> coresOficiais = {
-      'PQI': Color(0xFF9C27B0),
-      'PCS': Color(0xFF4CAF50),
-      'PME': Color(0xFFF44336),
-      'PTC': Color(0xFF2196F3),
-      'PEA': Color(0xFFFF9800),
-      'PEF': Color(0xFF795548),
-      'PRO': Color(0xFF607D8B),
+  factory HorarioAula.fromMap(Map<String, dynamic> map) {
+    return HorarioAula(
+      dia: map['dia'] ?? 'SEGUNDA',
+      inicio: map['inicio'] ?? '00:00',
+      fim: map['fim'] ?? '00:00',
+      local: map['local'] ?? '',
+      isLaboratorio: map['isLaboratorio'] ?? false,
+      frequenciaLab: map['frequenciaLab'] ?? 0,
+      datasCustomizadas: List<String>.from(map['datasCustomizadas'] ?? []),
+      precisaEpi: map['precisaEpi'] ?? false,
+      epis: List<String>.from(map['epis'] ?? []),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'dia': dia,
+      'inicio': inicio,
+      'fim': fim,
+      'local': local,
+      'isLaboratorio': isLaboratorio,
+      'frequenciaLab': frequenciaLab,
+      'datasCustomizadas': datasCustomizadas,
+      'precisaEpi': precisaEpi,
+      'epis': epis,
     };
-    final sigla = depto.toUpperCase().trim();
+  }
+}
+
+class Turma {
+  final String id;
+  final String codigo; // Ex: 2026101
+  final List<String> professores;
+  final List<HorarioAula> horarios;
+
+  Turma({
+    required this.id,
+    required this.codigo,
+    required this.professores,
+    required this.horarios,
+  });
+
+  factory Turma.fromMap(Map<String, dynamic> map) {
+    return Turma(
+      id: map['id'] ?? '',
+      codigo: map['codigo'] ?? '',
+      professores: List<String>.from(map['professores'] ?? []),
+      horarios: (map['horarios'] as List<dynamic>? ?? [])
+          .map((h) => HorarioAula.fromMap(h as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'codigo': codigo,
+      'professores': professores,
+      'horarios': horarios.map((h) => h.toMap()).toList(),
+    };
+  }
+}
+
+class Disciplina {
+  final String id;
+  final String codigo; // Ex: GP2601
+  final String nome; // Ex: FENÔMENOS PARANORMAIS
+  final String instituto; // Ex: POLI
+  final String departamento; // Ex: Engenharia de Produção
+  final String ementa;
+  
+  final bool isQuadrimestral;
+  final bool isEstagio;
+  final bool contaPresenca;
+
+  final List<String> avaliacoesAtivas; // Ex: ['P1', 'P2', 'SUB']
+  final String formulaFinal;
+  final String avisosGerais;
+
+  final List<Turma> turmas;
+  final Color cor;
+  
+  // Status de moderação
+  final bool isVerificada;
+  final int numeroInscritos;
+
+  Disciplina({
+    required this.id,
+    required this.codigo,
+    required this.nome,
+    required this.instituto,
+    required this.departamento,
+    required this.ementa,
+    required this.isQuadrimestral,
+    required this.isEstagio,
+    required this.contaPresenca,
+    required this.avaliacoesAtivas,
+    required this.formulaFinal,
+    required this.avisosGerais,
+    required this.turmas,
+    required this.cor,
+    this.isVerificada = false,
+    this.numeroInscritos = 0,
+  });
+
+  static Color _obterCorDoDepartamento(String inst) {
+    const Map<String, Color> coresOficiais = {
+      'POLI': Color(0xFF0460E9), // Azul Poli
+      'IME': Color(0xFFE04F44),
+      'IF': Color(0xFF4CAF50),
+      'IQ': Color(0xFF9C27B0),
+      'ICG': Color(0xFFFF9800),
+    };
+    final sigla = inst.toUpperCase().split(' ').first.trim();
     if (coresOficiais.containsKey(sigla)) return coresOficiais[sigla]!;
     
     final random = Random(sigla.hashCode);
@@ -73,52 +148,46 @@ class Disciplina {
   }
 
   factory Disciplina.fromMap(String id, Map<String, dynamic> data) {
-    final depto = data['departamento'] ?? 'Geral';
+    final inst = data['instituto'] ?? 'POLI';
     return Disciplina(
       id: id,
-      nome: data['nome'] ?? '',
       codigo: data['codigo'] ?? '',
-      departamento: depto,
-      local: data['local'] ?? '',
-      diasDaSemana: List<String>.from(data['diasDaSemana'] ?? []),
-      horarioInicio: data['horarioInicio'] ?? '00:00',
-      horarioFim: data['horarioFim'] ?? '00:00',
-      cor: data['cor'] != null ? Color(int.parse(data['cor'])) : _obterCorDoDepartamento(depto),
+      nome: data['nome'] ?? '',
+      instituto: inst,
+      departamento: data['departamento'] ?? '',
       ementa: data['ementa'] ?? '',
-      docentes: List<String>.from(data['docentes'] ?? []),
-      monitores: List<String>.from(data['monitores'] ?? []),
-      formulaAvaliacao: data['formulaAvaliacao'] ?? 'M = (P1 + P2)/2',
-      variaveisAvaliacao: List<String>.from(data['variaveisAvaliacao'] ?? ['P1', 'P2']),
-      dataInicio: data['dataInicio'] ?? Timestamp.now(),
-      dataFim: data['dataFim'] ?? Timestamp.now(),
-      totalAulasEstimadas: data['totalAulasEstimadas'] ?? 30,
-      numeroInscritos: data['numeroInscritos'] ?? 0,
-      rcId: data['rcId'] ?? '',
+      isQuadrimestral: data['isQuadrimestral'] ?? false,
+      isEstagio: data['isEstagio'] ?? false,
+      contaPresenca: data['contaPresenca'] ?? true,
+      avaliacoesAtivas: List<String>.from(data['avaliacoesAtivas'] ?? []),
+      formulaFinal: data['formulaFinal'] ?? '',
+      avisosGerais: data['avisosGerais'] ?? '',
+      turmas: (data['turmas'] as List<dynamic>? ?? [])
+          .map((t) => Turma.fromMap(t as Map<String, dynamic>))
+          .toList(),
+      cor: data['cor'] != null ? Color(int.parse(data['cor'])) : _obterCorDoDepartamento(inst),
       isVerificada: data['isVerificada'] ?? false,
+      numeroInscritos: data['numeroInscritos'] ?? 0,
     );
   }
 
-  // O MÉTODO QUE FALTAVA
   Map<String, dynamic> toMap() {
     return {
-      'nome': nome,
       'codigo': codigo,
+      'nome': nome,
+      'instituto': instituto,
       'departamento': departamento,
-      'local': local,
-      'diasDaSemana': diasDaSemana,
-      'horarioInicio': horarioInicio,
-      'horarioFim': horarioFim,
       'ementa': ementa,
-      'docentes': docentes,
-      'monitores': monitores,
-      'formulaAvaliacao': formulaAvaliacao,
-      'variaveisAvaliacao': variaveisAvaliacao,
-      'dataInicio': dataInicio,
-      'dataFim': dataFim,
-      'totalAulasEstimadas': totalAulasEstimadas,
-      'numeroInscritos': numeroInscritos,
-      'rcId': rcId,
+      'isQuadrimestral': isQuadrimestral,
+      'isEstagio': isEstagio,
+      'contaPresenca': contaPresenca,
+      'avaliacoesAtivas': avaliacoesAtivas,
+      'formulaFinal': formulaFinal,
+      'avisosGerais': avisosGerais,
+      'turmas': turmas.map((t) => t.toMap()).toList(),
+      'cor': cor.value.toString(),
       'isVerificada': isVerificada,
+      'numeroInscritos': numeroInscritos,
     };
   }
 }

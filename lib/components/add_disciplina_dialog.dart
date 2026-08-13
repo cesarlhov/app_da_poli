@@ -1,5 +1,3 @@
-// lib/components/add_disciplina_dialog.dart
-
 import 'package:app_da_poli/components/weekday_selector.dart';
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
@@ -8,7 +6,6 @@ import 'package:flutter/material.dart';
 
 class AddDisciplinaDialog extends StatefulWidget {
   const AddDisciplinaDialog({super.key});
-
   @override
   State<AddDisciplinaDialog> createState() => _AddDisciplinaDialogState();
 }
@@ -18,17 +15,16 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
   final _nomeController = TextEditingController();
   final _codigoController = TextEditingController();
   final _professorController = TextEditingController();
-  final _localController = TextEditingController(); // Atualizado para local
-
+  final _localController = TextEditingController(); 
+  
   List<String> _diasSelecionados = [];
   TimeOfDay? _horarioInicio;
   TimeOfDay? _horarioFim;
-
   final FirestoreService _firestoreService = FirestoreService();
-
+  
   static final List<DisciplinaPreCadastrada> _disciplinasSugeridas = [
-     DisciplinaPreCadastrada('Cálculo Numérico', 'PME3380', 'Professor A'),
-     DisciplinaPreCadastrada('Circuitos Elétricos', 'PEA3301', 'Professor B'),
+    DisciplinaPreCadastrada('Cálculo Numérico', 'PME3380', 'Professor A'),
+    DisciplinaPreCadastrada('Circuitos Elétricos', 'PEA3301', 'Professor B'),
   ];
 
   @override
@@ -47,29 +43,26 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
       );
       return;
     }
-
+    
     if (_formKey.currentState!.validate()) {
-      // Cria a disciplina usando o novo Molde Global
       final novaDisciplina = Disciplina(
         id: '', // O Firestore gera o ID
         nome: _nomeController.text.trim(),
         codigo: _codigoController.text.trim(),
-        departamento: 'Geral', // Temporário, até termos um seletor de departamento
+        departamento: 'Geral', 
         local: _localController.text.trim(),
         diasDaSemana: _diasSelecionados,
         horarioInicio: _horarioInicio!.format(context),
         horarioFim: _horarioFim!.format(context),
-        cor: Colors.blue, // A cor é recalculada depois
-        docentes: [_professorController.text.trim()], // Adiciona como lista
-        dataInicio: Timestamp.now(), // Temporário
-        dataFim: Timestamp.now(), // Temporário
-        totalAulasEstimadas: 30, // Temporário
-        isVerificada: false, // Entra como não oficial
+        cor: Colors.blue, 
+        docentes: [_professorController.text.trim()], 
+        dataInicio: Timestamp.now(), 
+        dataFim: Timestamp.now(), 
+        totalAulasEstimadas: 30, 
+        isVerificada: false, 
       );
-
-      // Usamos o novo método do Service
+      
       await _firestoreService.createDisciplinaGlobal(novaDisciplina);
-
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -82,7 +75,6 @@ class _AddDisciplinaDialogState extends State<AddDisciplinaDialog> {
       initialTime: isInicio ? _horarioInicio ?? TimeOfDay.now() : _horarioFim ?? TimeOfDay.now(),
       helpText: isInicio ? 'SELECIONAR HORÁRIO DE INÍCIO' : 'SELECIONAR HORÁRIO DE FIM',
     );
-
     if (horarioSelecionado != null) {
       setState(() {
         if (isInicio) {

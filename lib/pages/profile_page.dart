@@ -1,10 +1,10 @@
 // lib/pages/profile_page.dart
 
-import 'package:app_da_poli/components/add_disciplina_dialog.dart';
 import 'package:app_da_poli/components/edit_profile_dialog.dart';
 import 'package:app_da_poli/models/user_model.dart';
 import 'package:app_da_poli/providers/user_provider.dart';
 import 'package:app_da_poli/services/auth_service.dart';
+import 'package:app_da_poli/pages/criar_disciplina_page.dart'; // 🟢 Nova importação da página full-screen
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -12,9 +12,6 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:app_da_poli/services/supabase_service.dart';
-import 'package:app_da_poli/services/firestore_service.dart';
-import 'dart:io';
-import 'package:image_picker/image_picker.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -33,7 +30,7 @@ class ProfilePage extends StatelessWidget {
       return _buildErrorState(context);
     }
 
-    // ✅ LENDO A HIERARQUIA DO SEU MODELO ORIGINAL!
+    // 🟢 LENDO A HIERARQUIA DO SEU MODELO ORIGINAL!
     final bool isGremio = user.isGremio;
     final bool isRC = user.isRC;
     final bool isAdmin = isGremio || isRC;
@@ -95,10 +92,17 @@ class ProfilePage extends StatelessWidget {
               const SizedBox(height: 16),
               _buildProfileButton(
                 context,
-                label: 'Criar Turma Oficial',
+                label: 'Criar Disciplina Oficial', // 🟢 Texto corrigido
                 icon: Icons.add_business,
                 isHighlight: true,
-                onPressed: () => showDialog(context: context, builder: (context) => const AddDisciplinaDialog()),
+                onPressed: () {
+                  // 🟢 MÁGICA DA NAVEGAÇÃO: rootNavigator=true abre a tela cobrindo as abas!
+                  Navigator.of(context, rootNavigator: true).push(
+                    MaterialPageRoute(
+                      builder: (context) => const CriarDisciplinaPage(),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               _buildProfileButton(

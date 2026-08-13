@@ -1,5 +1,3 @@
-// lib/components/edit_disciplina_dialog.dart
-
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +6,7 @@ import 'package:app_da_poli/components/calculadora_formula_dialog.dart';
 class EditDisciplinaDialog extends StatefulWidget {
   final Disciplina disciplina;
   const EditDisciplinaDialog({super.key, required this.disciplina});
-
+  
   @override
   State<EditDisciplinaDialog> createState() => _EditDisciplinaDialogState();
 }
@@ -16,7 +14,6 @@ class EditDisciplinaDialog extends StatefulWidget {
 class _EditDisciplinaDialogState extends State<EditDisciplinaDialog> {
   final _formKey = GlobalKey<FormState>();
   final FirestoreService _firestoreService = FirestoreService();
-
   late TextEditingController _nomeController;
   late TextEditingController _codigoController;
   late TextEditingController _deptoController;
@@ -55,7 +52,7 @@ class _EditDisciplinaDialogState extends State<EditDisciplinaDialog> {
     if (_formKey.currentState!.validate()) {
       // Converte a string separada por vírgulas de volta para uma lista
       List<String> listaDocentes = _docentesController.text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-
+      
       final dadosAtualizados = {
         'nome': _nomeController.text.trim(),
         'codigo': _codigoController.text.trim(),
@@ -66,9 +63,8 @@ class _EditDisciplinaDialogState extends State<EditDisciplinaDialog> {
         'ementa': _ementaController.text.trim(),
         'isVerificada': _isVerificada,
       };
-
+      
       await _firestoreService.updateDisciplinaGlobal(widget.disciplina.id, dadosAtualizados);
-
       if (mounted) Navigator.of(context).pop();
     }
   }
@@ -129,7 +125,6 @@ class _EditDisciplinaDialogState extends State<EditDisciplinaDialog> {
                           formulaInicial: _formulaController.text,
                         ),
                       );
-                      
                       // Se ele clicou em salvar e trouxe um texto, atualiza o campo
                       if (novaFormula != null) {
                         setState(() {
