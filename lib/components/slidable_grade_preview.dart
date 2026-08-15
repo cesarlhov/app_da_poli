@@ -3,9 +3,11 @@
 import 'dart:math';
 import 'package:app_da_poli/components/dotted_container.dart';
 import 'package:app_da_poli/models/disciplina_model.dart';
+import 'package:app_da_poli/providers/user_provider.dart'; // 🟢 NOVO IMPORT
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart'; // 🟢 NOVO IMPORT
 
 class SlidableGradePreview extends StatefulWidget {
   final List<Disciplina> disciplinas;
@@ -96,15 +98,19 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
               final offset = _animationController.value * _revealWidth;
               return Transform.translate(offset: Offset(-offset, 0), child: child);
             },
-            child: Material(
-              type: MaterialType.transparency,
-              child: _MiniGradePreview(
-                disciplinas: widget.disciplinas,
-                scrollProgress: widget.scrollProgress,
-                shrinkValue: widget.shrinkValue,
-                espacoGradeAteArraste: widget.espacoGradeAteArraste,
-                espacoArrasteAteBase: widget.espacoArrasteAteBase,
-                espacoBaseSemFooter: widget.espacoBaseSemFooter, 
+            // 🟢 O HERO VOLTOU AQUI PARA FAZER A ANIMAÇÃO DE VOO!
+            child: Hero(
+              tag: 'grade-hero',
+              child: Material(
+                type: MaterialType.transparency,
+                child: _MiniGradePreview(
+                  disciplinas: widget.disciplinas,
+                  scrollProgress: widget.scrollProgress,
+                  shrinkValue: widget.shrinkValue,
+                  espacoGradeAteArraste: widget.espacoGradeAteArraste,
+                  espacoArrasteAteBase: widget.espacoArrasteAteBase,
+                  espacoBaseSemFooter: widget.espacoBaseSemFooter, 
+                ),
               ),
             ),
           ),
@@ -188,13 +194,12 @@ class _MiniGradePreview extends StatelessWidget {
   // 🎛️ PAINEL DE CONTROLE - BLOQUINHOS DAS DISCIPLINAS
   // =========================================================================
   final double _tamanhoTextoBloco = 15.0; 
-  final FontWeight _pesoFonteBloco = FontWeight.w700; // Alterado para 700 
+  final FontWeight _pesoFonteBloco = FontWeight.w700; 
   final double _opacidadeTextoBloco = 0.5; 
-  final Color _corTextoBloco = const Color(0xFFF0F0F0); // A cor exata de off-white solicitada!
-  final double _paddingTopTextoBloco = 8.0; // Distância topo atualizada
+  final Color _corTextoBloco = const Color(0xFFF0F0F0); 
+  final double _paddingTopTextoBloco = 8.0; 
   
-  // Cores fixas
-  final Color _corEspecialPQI = const Color(0xFF284ACE); // Azul fixo do PQI solicitado
+  final Color _corEspecialPQI = const Color(0xFF284ACE); 
   // =========================================================================
 
   int _timeToMin(String time) {
@@ -234,7 +239,7 @@ class _MiniGradePreview extends StatelessWidget {
                   padding: EdgeInsets.symmetric(horizontal: _paddingLateralGrade),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      return _buildGridEngine(constraints); 
+                      return _buildGridEngine(context, constraints); // 🟢 CONTEXT ENVIADO
                     },
                   ),
                 ),
@@ -272,23 +277,35 @@ class _MiniGradePreview extends StatelessWidget {
     );
   }
 
-  Widget _buildGridEngine(BoxConstraints constraints) {
+  // 🟢 A MÁGICA FOI FEITA AQUI (NO MOTOR DA GRADE)
+  Widget _buildGridEngine(BuildContext context, BoxConstraints constraints) {
+    // Busca as turmas que o aluno está inscrito
+    final user = context.read<UserProvider>().currentUser;
+    final turmasIds = user?.turmasIds ?? [];
+
     int minMins = 450; 
     int maxMins = 1000; 
     List<bool> dayHasLunch = List.filled(5, false);
 
+    // 1. Fase de Descoberta: Ajusta o tamanho da grade e o almoço
     for (var d in disciplinas) {
-      int start = _timeToMin(d.horarioInicio);
-      int end = _timeToMin(d.horarioFim);
-      if (start == 0 || end == 0) continue;
+      var turmasValidas = d.turmas.where((t) => turmasIds.contains(t.id)).toList();
+      if (turmasValidas.isEmpty) turmasValidas = d.turmas; // Fallback se o banco não tiver turmasIds salvas ainda
 
-      if (start < minMins) minMins = start;
-      if (end > maxMins) maxMins = end;
+      for (var t in turmasValidas) {
+        for (var hor in t.horarios) {
+          int start = _timeToMin(hor.inicio);
+          int end = _timeToMin(hor.fim);
+          if (start == 0 || end == 0) continue;
 
-      if (start < 790 && end > 660) {
-        for (String dia in d.diasDaSemana) {
-          int index = ['Segunda','Terça','Quarta','Quinta','Sexta'].indexOf(dia);
-          if (index != -1) dayHasLunch[index] = true;
+          if (start < minMins) minMins = start;
+          if (end > maxMins) maxMins = end;
+
+          if (start < 790 && end > 660) {
+            // 🟢 Correção do bug: .toUpperCase() para achar os dias perfeitamente
+            int index = ['SEGUNDA','TERÇA','QUARTA','QUINTA','SEXTA'].indexOf(hor.dia.toUpperCase());
+            if (index != -1) dayHasLunch[index] = true;
+          }
         }
       }
     }
@@ -332,58 +349,57 @@ class _MiniGradePreview extends StatelessWidget {
     }
 
     List<Widget> classBlocks = [];
-    
-    // 🟢 MATEMÁTICA DO ESMAECIMENTO INTERATIVO: 
-    // scrollProgress vai de 0.0 (aberto) a 1.0 (fechado/achatado).
-    // Queremos que o texto atinja opacidade ZERO quando a grade chegar aos 35% do achatamento máximo (ou seja, scrollProgress == 0.70).
-    // Assim, ao rolar e desrolar, a física é revertida com perfeição fluida!
     double fadeOutTexto = (1.0 - (scrollProgress / 0.70)).clamp(0.0, 1.0);
 
+    // 2. Fase de Construção: Cria os Bloquinhos Coloridos
     for (var d in disciplinas) {
-      int start = _timeToMin(d.horarioInicio);
-      int end = _timeToMin(d.horarioFim);
-      if (start == 0 || end == 0) continue; 
-
-      double top = max(0.0, timeToY(start)); 
-      double height = max(0.0, timeToY(end) - top); 
-      
-      // 🟢 MAGIA DA SIGLA: Pega o "PQI3305" e arranca os números fora, mantendo só as letras ("PQI").
       String siglaPura = d.codigo.replaceAll(RegExp(r'[^A-Za-z]'), '').toUpperCase();
-      
-      // Regra de Cor: Se for PQI, força o azul novo, senão usa a cor do banco.
       Color corBloco = siglaPura == 'PQI' ? _corEspecialPQI : d.cor;
 
-      for (String dia in d.diasDaSemana) {
-        int diaIndex = ['Segunda','Terça','Quarta','Quinta','Sexta'].indexOf(dia);
-        if (diaIndex != -1) {
-          classBlocks.add(
-            Positioned(
-              top: top, left: diaIndex * (colWidth + _espacoEntreColunas), width: colWidth, height: height,
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
-                decoration: BoxDecoration(color: corBloco, borderRadius: BorderRadius.circular(_pontilhadoRaio)),
-                alignment: Alignment.topCenter,
-                padding: EdgeInsets.only(top: _paddingTopTextoBloco * _escalaAlturaGrade), // O padding espreme junto
-                child: Opacity(
-                  opacity: (fadeOutTexto * _opacidadeTextoBloco).clamp(0.0, 1.0), // 🟢 Aplicação fluida da rolagem
-                  child: Text(
-                    siglaPura, // Imprime 'PQI', 'MAT', 'PRO', etc.
-                    style: TextStyle(
-                      fontFamily: 'Aristotelica', 
-                      fontWeight: _pesoFonteBloco, 
-                      fontSize: _tamanhoTextoBloco * _escalaAlturaGrade, // A fonte espreme em sincronia
-                      color: _corTextoBloco,
-                      height: 1.0, // Retira espaços extras invisíveis do topo da fonte
-                    )
+      var turmasValidas = d.turmas.where((t) => turmasIds.contains(t.id)).toList();
+      if (turmasValidas.isEmpty) turmasValidas = d.turmas;
+
+      for (var t in turmasValidas) {
+        for (var hor in t.horarios) {
+          int start = _timeToMin(hor.inicio);
+          int end = _timeToMin(hor.fim);
+          if (start == 0 || end == 0) continue; 
+
+          double top = max(0.0, timeToY(start)); 
+          double height = max(0.0, timeToY(end) - top); 
+          
+          int diaIndex = ['SEGUNDA','TERÇA','QUARTA','QUINTA','SEXTA'].indexOf(hor.dia.toUpperCase());
+          if (diaIndex != -1) {
+            classBlocks.add(
+              Positioned(
+                top: top, left: diaIndex * (colWidth + _espacoEntreColunas), width: colWidth, height: height,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
+                  decoration: BoxDecoration(color: corBloco, borderRadius: BorderRadius.circular(_pontilhadoRaio)),
+                  alignment: Alignment.topCenter,
+                  padding: EdgeInsets.only(top: _paddingTopTextoBloco * _escalaAlturaGrade), 
+                  child: Opacity(
+                    opacity: (fadeOutTexto * _opacidadeTextoBloco).clamp(0.0, 1.0), 
+                    child: Text(
+                      siglaPura, 
+                      style: TextStyle(
+                        fontFamily: 'Aristotelica', 
+                        fontWeight: _pesoFonteBloco, 
+                        fontSize: _tamanhoTextoBloco * _escalaAlturaGrade, 
+                        color: _corTextoBloco,
+                        height: 1.0, 
+                      )
+                    ),
                   ),
-                ),
+                )
               )
-            )
-          );
+            );
+          }
         }
       }
     }
 
+    // 3. Fase do Almoço: Desenha a linha sólida
     List<Widget> lineSegments = [];
     int startIdx = -1;
     for (int i = 0; i <= 5; i++) {

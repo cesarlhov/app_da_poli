@@ -13,7 +13,6 @@ class HistoricoPresencaPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Escutamos o progresso. Qualquer edição no Firebase atualiza a tela na hora!
     final provider = context.watch<DisciplinasProvider>();
     final progresso = provider.progressos.where((p) => p.disciplinaId == disciplina.id).firstOrNull;
 
@@ -24,11 +23,13 @@ class HistoricoPresencaPage extends StatelessWidget {
       );
     }
 
-    final double frequencia = progresso.calcularFrequencia(disciplina.totalAulasEstimadas);
-    final bool emRisco = progresso.emRiscoDeReprovacao(disciplina.totalAulasEstimadas);
+    // 🟢 Fixamos em 30 aulas para o gráfico não quebrar, até termos a matemática nova
+    const int totalAulasEstimadas = 30; 
+
+    final double frequencia = progresso.calcularFrequencia(totalAulasEstimadas);
+    final bool emRisco = progresso.emRiscoDeReprovacao(totalAulasEstimadas);
     final Color corStatus = emRisco ? Colors.red : Colors.green;
 
-    // Pega as datas do mapa, converte para lista e ordena da mais recente para a mais antiga
     final List<String> datasOrdenadas = progresso.historicoPresenca.keys.toList();
     datasOrdenadas.sort((a, b) => b.compareTo(a));
 
@@ -41,7 +42,6 @@ class HistoricoPresencaPage extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // CABEÇALHO DO DASHBOARD (O MEDIDOR DE 100%)
           Container(
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
@@ -94,8 +94,6 @@ class HistoricoPresencaPage extends StatelessWidget {
               ],
             ),
           ),
-
-          // LISTA DO RELÓGIO (CRONOLOGIA)
           Expanded(
             child: datasOrdenadas.isEmpty
                 ? const Center(
@@ -112,7 +110,6 @@ class HistoricoPresencaPage extends StatelessWidget {
                       final dataIso = datasOrdenadas[index];
                       final bool estavaPresente = progresso.historicoPresenca[dataIso] ?? false;
                       
-                      // Converte YYYY-MM-DD para DD/MM/YYYY para ficar bonito na tela
                       final partes = dataIso.split('-');
                       final dataFormatada = "${partes[2]}/${partes[1]}/${partes[0]}";
 
@@ -131,7 +128,6 @@ class HistoricoPresencaPage extends StatelessWidget {
                           subtitle: Text(estavaPresente ? 'Marcado como Presente' : 'Marcado como Falta'),
                           trailing: OutlinedButton.icon(
                             onPressed: () {
-                              // O INVERSOR DE ESTADO: Se tava presente, vira falta. Se tava falta, vira presente.
                               FirestoreService().registrarPresenca(disciplina.id, dataIso, !estavaPresente);
                             },
                             icon: const Icon(Icons.edit, size: 16),

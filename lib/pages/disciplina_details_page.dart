@@ -2,6 +2,7 @@
 
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/providers/disciplinas_provider.dart';
+import 'package:app_da_poli/providers/user_provider.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -12,20 +13,32 @@ class DisciplinaDetailsPage extends StatelessWidget {
 
   const DisciplinaDetailsPage({super.key, required this.disciplina});
 
-  bool _isAulaAcontecendo() {
-    final now = DateTime.now();
-    const mapDias = {1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta', 6: 'Sábado', 7: 'Domingo'};
-    final hojeStr = mapDias[now.weekday] ?? '';
-    if (!disciplina.diasDaSemana.contains(hojeStr)) return false;
+  bool _isAulaAcontecendo(BuildContext context) {
+    if (disciplina.turmas.isEmpty) return false;
 
-    try {
-      final minutosAtual = now.hour * 60 + now.minute;
-      final inicioStr = disciplina.horarioInicio.split(':');
-      final fimStr = disciplina.horarioFim.split(':');
-      final minutosInicio = int.parse(inicioStr[0]) * 60 + int.parse(inicioStr[1]);
-      final minutosFim = int.parse(fimStr[0]) * 60 + int.parse(fimStr[1]);
-      return minutosAtual >= (minutosInicio - 15) && minutosAtual <= minutosFim;
-    } catch (e) { return false; }
+    final user = context.read<UserProvider>().currentUser;
+    final now = DateTime.now();
+    const mapDias = {1: 'SEGUNDA', 2: 'TERÇA', 3: 'QUARTA', 4: 'QUINTA', 5: 'SEXTA', 6: 'SÁBADO', 7: 'DOMINGO'};
+    final hojeStr = mapDias[now.weekday] ?? '';
+    final minutosAtual = now.hour * 60 + now.minute;
+
+    List<Turma> turmasDoAluno = disciplina.turmas.where((t) => user?.turmasIds.contains(t.id) ?? false).toList();
+    if (turmasDoAluno.isEmpty) turmasDoAluno = disciplina.turmas;
+
+    for (var turma in turmasDoAluno) {
+      for (var hor in turma.horarios) {
+        if (hor.dia == hojeStr) {
+          try {
+            final inicioStr = hor.inicio.split(':');
+            final fimStr = hor.fim.split(':');
+            final minutosInicio = int.parse(inicioStr[0]) * 60 + int.parse(inicioStr[1]);
+            final minutosFim = int.parse(fimStr[0]) * 60 + int.parse(fimStr[1]);
+            if (minutosAtual >= (minutosInicio - 15) && minutosAtual <= minutosFim) return true;
+          } catch (e) {}
+        }
+      }
+    }
+    return false;
   }
 
   String _calcularMediaParcial(String formula, Map<String, double?>? notas) {
@@ -39,10 +52,7 @@ class DisciplinaDetailsPage extends StatelessWidget {
         }
       });
 
-      if (RegExp(r'[A-Z]').hasMatch(expr)) {
-        return 'Preencha as notas';
-      }
-
+      if (RegExp(r'[A-Z]').hasMatch(expr)) return 'Preencha as notas';
       return 'Em cálculo...';
     } catch (e) {
       return 'Erro na fórmula';
@@ -51,13 +61,24 @@ class DisciplinaDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Setup do provedor e data
     final provider = context.watch<DisciplinasProvider>();
     final progresso = provider.progressos.where((p) => p.disciplinaId == disciplina.id).firstOrNull;
     final hoje = DateTime.now();
     final dataHojeStr = "${hoje.year}-${hoje.month.toString().padLeft(2, '0')}-${hoje.day.toString().padLeft(2, '0')}";
     final bool jaRespondeuHoje = progresso?.historicoPresenca.containsKey(dataHojeStr) ?? false;
-    final bool mostrarBotoes = _isAulaAcontecendo() && !jaRespondeuHoje;
+    final bool mostrarBotoes = _isAulaAcontecendo(context) && !jaRespondeuHoje;
+
+    // 🟢 Agrega informações da primeira turma para preencher os textos provisórios
+    String professoresStr = 'Não informado';
+    String localStr = 'Não informado';
+    if (disciplina.turmas.isNotEmpty) {
+      if (disciplina.turmas.first.professores.isNotEmpty) {
+        professoresStr = disciplina.turmas.first.professores.join(', ');
+      }
+      if (disciplina.turmas.first.horarios.isNotEmpty) {
+        localStr = disciplina.turmas.first.horarios.first.local;
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -70,7 +91,6 @@ class DisciplinaDetailsPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header colorido
             Container(
               color: disciplina.cor.withAlpha(30),
               padding: const EdgeInsets.all(24.0),
@@ -82,7 +102,6 @@ class DisciplinaDetailsPage extends StatelessWidget {
                   Text("Depto: ${disciplina.departamento}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black54)),
                   const SizedBox(height: 16),
                   
-                  // Bloco de Presença e Local (UI CONDICIONAL AQUI)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -91,12 +110,11 @@ class DisciplinaDetailsPage extends StatelessWidget {
                           children: [
                             const Icon(Icons.location_on_outlined, size: 20),
                             const SizedBox(width: 8),
-                            Text(disciplina.local, style: const TextStyle(fontSize: 16)),
+                            Text(localStr, style: const TextStyle(fontSize: 16)),
                           ],
                         ),
                       ),
                       
-                      // Mostra os botões de Presença ou o Relógio de Histórico
                       if (mostrarBotoes)
                         Row(
                           children: [
@@ -136,14 +154,8 @@ class DisciplinaDetailsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle('Horário das Aulas'),
-                  Text("${disciplina.diasDaSemana.join(', ')} • ${disciplina.horarioInicio} às ${disciplina.horarioFim}", style: const TextStyle(fontSize: 16)),
-                  
-                  const SizedBox(height: 24),
                   _buildSectionTitle('Equipe Acadêmica'),
-                  Text("Docentes: ${disciplina.docentes.isNotEmpty ? disciplina.docentes.join(', ') : 'Não informado'}", style: const TextStyle(fontSize: 16)),
-                  const SizedBox(height: 4),
-                  Text("Monitores: ${disciplina.monitores.isNotEmpty ? disciplina.monitores.join(', ') : 'Não informado'}", style: const TextStyle(fontSize: 16)),
+                  Text("Docentes: $professoresStr", style: const TextStyle(fontSize: 16)),
 
                   const SizedBox(height: 24),
                   _buildSectionTitle('Avaliação'),
@@ -159,12 +171,11 @@ class DisciplinaDetailsPage extends StatelessWidget {
                       children: [
                         const Text("Fórmula de Nota Final:", style: TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 8),
-                        Text(disciplina.formulaAvaliacao, style: const TextStyle(fontSize: 18, fontFamily: 'monospace')),
+                        Text(disciplina.formulaFinal.isNotEmpty ? disciplina.formulaFinal : 'M = (P1+P2)/2', style: const TextStyle(fontSize: 18, fontFamily: 'monospace')),
                       ],
                     ),
                   ),
 
-                  // SEÇÃO DO BOLETIM & NOTAS EM TEMPO REAL
                   const SizedBox(height: 24),
                   _buildSectionTitle('Meu Boletim & Média'),
                   Container(
@@ -177,10 +188,10 @@ class DisciplinaDetailsPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("Regra de Avaliação: ${disciplina.formulaAvaliacao}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                        Text("Regra de Avaliação: ${disciplina.formulaFinal}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
                         const SizedBox(height: 12),
                         
-                        ...disciplina.variaveisAvaliacao.map((variavel) {
+                        ...disciplina.avaliacoesAtivas.map((variavel) {
                           final double? notaAtual = progresso?.notasPreenchidas[variavel];
                           
                           return Padding(
@@ -226,7 +237,7 @@ class DisciplinaDetailsPage extends StatelessWidget {
                           children: [
                             const Text("Média Parcial Estimada:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                             Text(
-                              _calcularMediaParcial(disciplina.formulaAvaliacao, progresso?.notasPreenchidas),
+                              _calcularMediaParcial(disciplina.formulaFinal, progresso?.notasPreenchidas),
                               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Color(0xFF0460E9)),
                             ),
                           ],

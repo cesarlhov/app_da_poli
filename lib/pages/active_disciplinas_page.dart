@@ -40,8 +40,15 @@ class ActiveDisciplinasPage extends StatelessWidget {
       itemCount: disciplinas.length,
       itemBuilder: (context, index) {
         final disciplina = disciplinas[index];
-        // Atualização para docentes
-        String nomeProfessor = disciplina.docentes.isNotEmpty ? disciplina.docentes.first : 'Sem professor';
+        
+        // 🟢 LENTE INTELIGENTE: Pega o professor e a sala da primeira turma
+        String nomeProfessor = disciplina.turmas.isNotEmpty && disciplina.turmas.first.professores.isNotEmpty 
+            ? disciplina.turmas.first.professores.first 
+            : 'Sem professor';
+            
+        String localAula = disciplina.turmas.isNotEmpty && disciplina.turmas.first.horarios.isNotEmpty 
+            ? disciplina.turmas.first.horarios.first.local 
+            : 'A definir';
 
         return Card(
           elevation: 2,
@@ -55,11 +62,12 @@ class ActiveDisciplinasPage extends StatelessWidget {
               ),
             ),
             title: Text(disciplina.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-            // Atualizado "sala" para "local" e professor
-            subtitle: Text('${disciplina.codigo}\nProf. $nomeProfessor - Local: ${disciplina.local}'),
+            subtitle: Text('${disciplina.codigo}\nProf. $nomeProfessor • Local: $localAula'),
             isThreeLine: true,
             trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-            onTap: () {},
+            onTap: () {
+              // Navegará para os detalhes futuramente
+            },
           ),
         );
       },

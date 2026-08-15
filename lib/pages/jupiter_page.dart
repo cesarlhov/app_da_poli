@@ -8,7 +8,6 @@ import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/models/user_model.dart';
 import 'package:app_da_poli/providers/user_provider.dart';
 import 'package:app_da_poli/providers/disciplinas_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -114,15 +113,52 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
     return 'BOA NOITE';
   }
 
-  List<Disciplina> _getAulasDeHoje(List<Disciplina> todasAsDisciplinas) {
+  // 🟢 LENTE INTELIGENTE: Puxa as aulas baseadas nas Turmas matriculadas
+  List<Disciplina> _getAulasDeHoje(List<Disciplina> todasAsDisciplinas, UserModel user) {
     if (todasAsDisciplinas.isEmpty) return [];
 
     final now = DateTime.now();
-    const mapDias = {1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta', 6: 'Sábado', 7: 'Domingo'};
+    const mapDias = {1: 'SEGUNDA', 2: 'TERÇA', 3: 'QUARTA', 4: 'QUINTA', 5: 'SEXTA', 6: 'SÁBADO', 7: 'DOMINGO'};
     final hojeStr = mapDias[now.weekday] ?? '';
+    if (hojeStr.isEmpty) return [];
 
-    final aulasHoje = todasAsDisciplinas.where((d) => d.diasDaSemana.contains(hojeStr)).toList();
-    aulasHoje.sort((a, b) => a.horarioInicio.compareTo(b.horarioInicio));
+    List<Disciplina> aulasHoje = [];
+
+    for (var d in todasAsDisciplinas) {
+      var turmasDoAluno = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
+      if (turmasDoAluno.isEmpty) turmasDoAluno = d.turmas; 
+      
+      bool temAulaHoje = false;
+      for (var t in turmasDoAluno) {
+        if (t.horarios.any((h) => h.dia == hojeStr)) {
+          temAulaHoje = true;
+          break;
+        }
+      }
+      if (temAulaHoje) aulasHoje.add(d);
+    }
+
+    aulasHoje.sort((a, b) {
+      int getEarliest(Disciplina d) {
+        int minTime = 1440; 
+        var turmas = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
+        if (turmas.isEmpty) turmas = d.turmas;
+        for (var t in turmas) {
+          for (var h in t.horarios) {
+            if (h.dia == hojeStr) {
+              try {
+                final parts = h.inicio.split(':');
+                final time = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+                if (time < minTime) minTime = time;
+              } catch (e) {}
+            }
+          }
+        }
+        return minTime;
+      }
+      return getEarliest(a).compareTo(getEarliest(b));
+    });
+
     return aulasHoje;
   }
 
@@ -146,7 +182,9 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
     if (user == null) return const Center(child: Text('Erro ao carregar perfil.'));
 
     final disciplinas = disciplinasProvider.disciplinas;
-    final aulasDeHoje = _getAulasDeHoje(disciplinas);
+    
+    // 🟢 Agora passa o usuário para saber as turmas certas
+    final aulasDeHoje = _getAulasDeHoje(disciplinas, user);
     
     String currentGreeting = _getGreeting(); 
     bool animateThisTime = false;
@@ -261,7 +299,6 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
 
   Widget _buildCronogramaDoDia(List<Disciplina> aulasDeHoje) {
     return Padding(
-      // 🟢 O respiro inferior foi aumentado para 160.0 para garantir que passe livre da barra de navegação!
       padding: EdgeInsets.fromLTRB(_paddingLateralTela, 0.0, _paddingLateralTela, 160.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -327,28 +364,33 @@ class _GradeMinimalistaDelegate extends SliverPersistentHeaderDelegate {
     required this.onShrink,
   });
 
+  // 🟢 LENTE INTELIGENTE: Puxa o menor e o maior horário vasculhando as Turmas
   double _calculateHeight(double scrollPercentage) {
     int minMins = 450; 
     int maxMins = 1000; 
     bool hasLunchAny = false;
 
     for (var d in disciplinas) {
-      if (d.horarioInicio.isEmpty || !d.horarioInicio.contains(':') || d.horarioFim.isEmpty || !d.horarioFim.contains(':')) continue;
+      for (var t in d.turmas) {
+        for (var h in t.horarios) {
+          if (h.inicio.isEmpty || !h.inicio.contains(':') || h.fim.isEmpty || !h.fim.contains(':')) continue;
 
-      try {
-        final pI = d.horarioInicio.split(':');
-        int start = int.parse(pI[0].trim()) * 60 + int.parse(pI[1].trim());
-        if (start > 0 && start < minMins) minMins = start;
+          try {
+            final pI = h.inicio.split(':');
+            int start = int.parse(pI[0].trim()) * 60 + int.parse(pI[1].trim());
+            if (start > 0 && start < minMins) minMins = start;
 
-        final pF = d.horarioFim.split(':');
-        int end = int.parse(pF[0].trim()) * 60 + int.parse(pF[1].trim());
-        if (end > 0 && end > maxMins) maxMins = end;
+            final pF = h.fim.split(':');
+            int end = int.parse(pF[0].trim()) * 60 + int.parse(pF[1].trim());
+            if (end > 0 && end > maxMins) maxMins = end;
 
-        bool isMorning = end <= 750; 
-        bool isAfternoon = start >= 750; 
-        bool isLunch = !isMorning && !isAfternoon; 
-        if (isLunch) hasLunchAny = true;
-      } catch (_) {}
+            bool isMorning = end <= 750; 
+            bool isAfternoon = start >= 750; 
+            bool isLunch = !isMorning && !isAfternoon; 
+            if (isLunch) hasLunchAny = true;
+          } catch (_) {}
+        }
+      }
     }
 
     double extraTop = (450 - minMins) > 0 ? (450 - minMins).toDouble() : 0.0;
@@ -506,7 +548,7 @@ class _StickyHojeDelegate extends SliverPersistentHeaderDelegate {
   
   @override
   bool shouldRebuild(covariant _StickyHojeDelegate oldDelegate) => 
-    diaSemana != oldDelegate.diaSemana || scrollController != oldDelegate.scrollController;
+      diaSemana != oldDelegate.diaSemana || scrollController != oldDelegate.scrollController;
 }
 
 class TextRevealGradient extends StatefulWidget {

@@ -3,6 +3,7 @@
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/pages/disciplina_details_page.dart';
 import 'package:app_da_poli/providers/disciplinas_provider.dart';
+import 'package:app_da_poli/providers/user_provider.dart'; // 🟢 NOVO IMPORT
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -66,17 +67,68 @@ class AulaCard extends StatelessWidget {
   final Color _corTextoBotao = const Color(0xFFB3B3B8);
   // =========================================================================
 
-  bool _isAulaAcontecendo() {
+  // 🟢 LENTE INTELIGENTE: Pega a Turma do Aluno e vê a aula de HOJE
+  (HorarioAula?, Turma?) _getDadosExibicao(BuildContext context) {
+    if (disciplina.turmas.isEmpty) return (null, null);
+
+    final user = context.read<UserProvider>().currentUser;
     final now = DateTime.now();
-    const mapDias = {1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta', 6: 'Sábado', 7: 'Domingo'};
+    const mapDias = {1: 'SEGUNDA', 2: 'TERÇA', 3: 'QUARTA', 4: 'QUINTA', 5: 'SEXTA', 6: 'SÁBADO', 7: 'DOMINGO'};
+    final hojeStr = mapDias[now.weekday] ?? '';
+    final minutosAtual = now.hour * 60 + now.minute;
+
+    // Filtra para pegar apenas as turmas em que o aluno está inscrito.
+    // (Se o banco antigo só tiver a disciplina, usamos todas como fallback)
+    List<Turma> turmasDoAluno = disciplina.turmas.where((t) => user?.turmasIds.contains(t.id) ?? false).toList();
+    if (turmasDoAluno.isEmpty) {
+      turmasDoAluno = disciplina.turmas;
+    }
+
+    HorarioAula? horarioHoje;
+    Turma? turmaHoje;
+
+    for (var turma in turmasDoAluno) {
+      for (var hor in turma.horarios) {
+        if (hor.dia == hojeStr) {
+          horarioHoje ??= hor; // Salva o primeiro do dia pra caso não seja agora
+          turmaHoje ??= turma;
+          
+          try {
+            final inicioStr = hor.inicio.split(':');
+            final fimStr = hor.fim.split(':');
+            final minutosInicio = int.parse(inicioStr[0]) * 60 + int.parse(inicioStr[1]);
+            final minutosFim = int.parse(fimStr[0]) * 60 + int.parse(fimStr[1]);
+
+            // Achou a aula que está acontecendo AGORA (com 15min de tolerância prévia)
+            if (minutosAtual >= (minutosInicio - 15) && minutosAtual <= minutosFim) {
+              return (hor, turma);
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    // Se não for agora, mas tiver aula hoje, mostra a próxima/anterior do dia
+    if (horarioHoje != null) return (horarioHoje, turmaHoje);
+    
+    // Se não tem aula hoje, mostra o primeiro horário da turma dele só pra preencher o Card
+    final primeiraTurma = turmasDoAluno.first;
+    final primeiroHorario = primeiraTurma.horarios.isNotEmpty ? primeiraTurma.horarios.first : null;
+    return (primeiroHorario, primeiraTurma);
+  }
+
+  bool _isAulaAcontecendo(HorarioAula? hor) {
+    if (hor == null) return false;
+    final now = DateTime.now();
+    const mapDias = {1: 'SEGUNDA', 2: 'TERÇA', 3: 'QUARTA', 4: 'QUINTA', 5: 'SEXTA', 6: 'SÁBADO', 7: 'DOMINGO'};
     final hojeStr = mapDias[now.weekday] ?? '';
 
-    if (!disciplina.diasDaSemana.contains(hojeStr)) return false;
+    if (hor.dia != hojeStr) return false;
 
     try {
       final minutosAtual = now.hour * 60 + now.minute;
-      final inicioStr = disciplina.horarioInicio.split(':');
-      final fimStr = disciplina.horarioFim.split(':');
+      final inicioStr = hor.inicio.split(':');
+      final fimStr = hor.fim.split(':');
       
       final minutosInicio = int.parse(inicioStr[0]) * 60 + int.parse(inicioStr[1]);
       final minutosFim = int.parse(fimStr[0]) * 60 + int.parse(fimStr[1]);
@@ -97,8 +149,13 @@ class AulaCard extends StatelessWidget {
 
     final bool jaRespondeuHoje = progresso?.historicoPresenca.containsKey(dataHojeStr) ?? false;
     
-    // 🟢 LÓGICA REAL REATIVADA! Só mostra os botões e a linha se for a hora da aula.
-    final bool mostrarBotoes = _isAulaAcontecendo() && !jaRespondeuHoje;
+    // 🟢 Busca os dados inteligentes da Turma/Horário
+    final dados = _getDadosExibicao(context);
+    final horarioAtual = dados.$1;
+    final turmaAtual = dados.$2;
+
+    // Só mostra os botões e a linha se for a hora da aula.
+    final bool mostrarBotoes = _isAulaAcontecendo(horarioAtual) && !jaRespondeuHoje;
 
     final String avisoEspecial = disciplina.departamento == 'PQI' ? 'NÃO DEIXE DE LEVAR JALECO E ÓCULOS DE PROTEÇÃO' : '';
 
@@ -154,14 +211,14 @@ class AulaCard extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch, 
                       children: [
-                        _buildHorarioColumn(),
+                        _buildHorarioColumn(horarioAtual),
                         SizedBox(width: _espacoHorarioETextos),
-                        Expanded(child: _buildInfoColumn()),
+                        Expanded(child: _buildInfoColumn(horarioAtual, turmaAtual)),
                       ],
                     ),
                   ),
                   
-                  // 🟢 ANIMAÇÃO DE GAVETA: O Card cresce suavemente para revelar os botões quando a aula começa
+                  // ANIMAÇÃO DE GAVETA: O Card cresce suavemente para revelar os botões
                   AnimatedSize(
                     duration: const Duration(milliseconds: 350),
                     curve: Curves.easeOutCubic,
@@ -199,7 +256,7 @@ class AulaCard extends StatelessWidget {
                             )
                           ],
                         )
-                      : const SizedBox(width: double.infinity, height: 0), // Quando não for hora de aula, ocupa 0 espaço
+                      : const SizedBox(width: double.infinity, height: 0),
                   ),
                 ],
               ),
@@ -236,11 +293,11 @@ class AulaCard extends StatelessWidget {
     );
   }
 
-  Widget _buildHorarioColumn() {
+  Widget _buildHorarioColumn(HorarioAula? hor) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween, 
       children: [
-        Text(disciplina.horarioInicio, style: TextStyle(fontFamily: 'Aristotelica', color: _corTextoBase, fontWeight: FontWeight.w700, fontSize: _tamanhoHorario, height: 1.0)),
+        Text(hor?.inicio ?? '--:--', style: TextStyle(fontFamily: 'Aristotelica', color: _corTextoBase, fontWeight: FontWeight.w700, fontSize: _tamanhoHorario, height: 1.0)),
         Expanded(
           child: Container(
             margin: const EdgeInsets.symmetric(vertical: 6), 
@@ -248,20 +305,23 @@ class AulaCard extends StatelessWidget {
             color: _corTextoBase
           ),
         ),
-        Text(disciplina.horarioFim, style: TextStyle(fontFamily: 'Aristotelica', color: _corTextoBase, fontWeight: FontWeight.w700, fontSize: _tamanhoHorario, height: 1.0)),
+        Text(hor?.fim ?? '--:--', style: TextStyle(fontFamily: 'Aristotelica', color: _corTextoBase, fontWeight: FontWeight.w700, fontSize: _tamanhoHorario, height: 1.0)),
       ],
     );
   }
 
-  Widget _buildInfoColumn() {
+  Widget _buildInfoColumn(HorarioAula? hor, Turma? turma) {
+    String nomeProfessor = turma != null && turma.professores.isNotEmpty ? turma.professores.first : 'Sem professor';
+    String localAula = hor?.local ?? 'A definir';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('${disciplina.codigo} – ${disciplina.nome}'.toUpperCase(), style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTitulo, color: _corTextoBase, height: 1.1), maxLines: 2, overflow: TextOverflow.ellipsis),
         SizedBox(height: _espacoTituloLocal),
-        Text(disciplina.local.toUpperCase(), style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoLocal, color: _corTextoBase.withOpacity(_opacidadeTextosSecundarios), fontWeight: FontWeight.w700, letterSpacing: 0.5, height: 1.0)),
+        Text(localAula.toUpperCase(), style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoLocal, color: _corTextoBase.withOpacity(_opacidadeTextosSecundarios), fontWeight: FontWeight.w700, letterSpacing: 0.5, height: 1.0)),
         SizedBox(height: _espacoLocalAulaNum),
-        Text("AULA 8", style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoAulaNum, color: _corTextoBase.withOpacity(_opacidadeTextosSecundarios), fontWeight: FontWeight.w700, letterSpacing: 0.5, height: 1.0)), 
+        Text("AULA 8 - PROF. ${nomeProfessor.toUpperCase()}", style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoAulaNum, color: _corTextoBase.withOpacity(_opacidadeTextosSecundarios), fontWeight: FontWeight.w700, letterSpacing: 0.5, height: 1.0)), 
       ],
     );
   }

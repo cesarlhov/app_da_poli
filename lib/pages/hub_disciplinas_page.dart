@@ -1,8 +1,7 @@
 // lib/pages/hub_disciplinas_page.dart
 
-import 'package:app_da_poli/components/edit_disciplina_dialog.dart'; // NOVO IMPORT
 import 'package:app_da_poli/models/disciplina_model.dart';
-import 'package:app_da_poli/models/user_model.dart'; // IMPORT PARA USER ROLE
+import 'package:app_da_poli/models/user_model.dart'; 
 import 'package:app_da_poli/pages/disciplina_details_page.dart';
 import 'package:app_da_poli/providers/user_provider.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
@@ -28,7 +27,6 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // Verifica se o usuário tem cargo de edição
     final bool isAdmin = currentUser.isGremio || currentUser.isRC;
 
     return Scaffold(
@@ -80,7 +78,6 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                               child: Text(disciplina.codigo, style: TextStyle(color: disciplina.cor, fontWeight: FontWeight.bold)),
                             ),
                             
-                            // CANTO SUPERIOR DIREITO: Ícones e Botão de Edição
                             Row(
                               children: [
                                 if (disciplina.isVerificada)
@@ -96,9 +93,9 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                                     constraints: const BoxConstraints(),
                                     tooltip: 'Editar Disciplina',
                                     onPressed: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (context) => EditDisciplinaDialog(disciplina: disciplina),
+                                      // 🟢 O Pop-up antigo foi apagado. No futuro chamaremos a Tela de Criação aqui!
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('A edição será feita pela nova tela em breve!')),
                                       );
                                     },
                                   ),
@@ -117,18 +114,13 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: () async {
-                                // 🟢 1. Capture o mensageiro ANTES do await!
                                 final mensageiro = ScaffoldMessenger.of(context); 
-                                
-                                // 2. Faz a chamada no banco
                                 await _firestoreService.inscreverEmDisciplina(disciplina.id);
-                                
-                                // 🟢 3. Use a variável capturada para mostrar o aviso (sem tocar na palavra 'context')
                                 mensageiro.showSnackBar(
                                   SnackBar(content: Text('Inscrito em ${disciplina.codigo}')),
                                 );
                               },
-                              icon: Icon(jaInscrito ? Icons.check : Icons.add),
+                            icon: Icon(jaInscrito ? Icons.check : Icons.add),
                             label: Text(jaInscrito ? 'Já Inscrito' : 'Inscrever-se'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: jaInscrito ? Colors.green : const Color(0xFF0460E9),
