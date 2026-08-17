@@ -2,6 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:app_da_poli/models/disciplina_model.dart';
+import 'package:app_da_poli/services/firestore_service.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 
 class CriarDisciplinaPage extends StatefulWidget {
   const CriarDisciplinaPage({super.key});
@@ -12,11 +16,14 @@ class CriarDisciplinaPage extends StatefulWidget {
 
 class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
 
+  bool _isLoadingSave = false; 
+
   // 📝 Estados para os Critérios de Avaliação Dinâmicos
   List<AvaliacaoData> _avaliacoes = [AvaliacaoData('P1', true),AvaliacaoData('P2', false), AvaliacaoData('T1', false),];
   bool _isAddingAvaliacao = false;
   final TextEditingController _newAvaliacaoCtrl = TextEditingController();
   final FocusNode _newAvaliacaoFocus = FocusNode();
+  
   // =========================================================================
   // 🎛️ PAINEL DE CONTROLE - CORES E TIPOGRAFIA GERAL
   // =========================================================================
@@ -61,17 +68,12 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   final double _tamanhoFadeTopoLista = 20.0; 
   final double _paddingTopoListaDropdown = 0.0; 
 
-  final double _larguraCaixaAvaliacaoNova = 60.0; // Ajuste o valor aqui para deixar menor ou maior
-
-  final double _espacoAbaixoSalvar = 24.0; // 🟢 Controla o espaço abaixo do botão Salvar Disciplina (diminua ou aumente aqui)
+  final double _larguraCaixaAvaliacaoNova = 60.0; 
+  final double _espacoAbaixoSalvar = 24.0; 
 
   // =========================================================================
-  // 🎛️ PAINEL DE CONTROLE - ESPAÇAMENTOS (LOGÍSTICA) E ÍCONES
+  // 🎛️ PAINEL DE CONTROLE - ESPAÇAMENTOS E ÍCONES
   // =========================================================================
-  final double _espacoTopoDiaLogistica = 5.0; 
-  final double _espacoDiaInicioLogistica = 0.0; 
-  final double _espacoInicioFimLogistica = 0.0; 
-  
   final double _larguraCaixaEpiNova = 150.0; 
   final double _tamanhoTextoEpiNovo = 19.0; 
   final double _deslocamentoVerticalEpiNovo = 0.0; 
@@ -81,7 +83,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   final double _tamanhoIconeLixeira = 26.0;
   final double _espacoLixeiraCaixa = 12.0;
   final double _tamanhoIconeX = 20.0;
-  final double _tamanhoNovaTurma = 16.0;
   
   final double _espacoLocalAteAdd = 8.0; 
 
@@ -93,7 +94,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   final double _alturaBotaoSalvar = 40.0; 
 
   // =========================================================================
-  // 🎛️ PAINEL DE CONTROLE - TOGGLE (Botão de Ativar)
+  // 🎛️ PAINEL DE CONTROLE - TOGGLE E FOOTER
   // =========================================================================
   final double _larguraToggle = 58.0;
   final double _alturaToggle = 32.0;
@@ -102,9 +103,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   final Color _corFundoToggleInativo = const Color(0xFFF5F5F7); 
   final double _deslocamentoVerticalTextoToggle = 1.5; 
 
-  // =========================================================================
-  // 🎛️ PAINEL DE CONTROLE - FOOTER E BOTÕES
-  // =========================================================================
   final double _alturaBotoes = 40.0; 
   final double _larguraTotalVoltar = 95.0; 
   final double _tamanhoEstrela = 32.0; 
@@ -115,14 +113,34 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   final double _paddingLateralFooter = 20.0; 
   final double _espacoTextoDesfazer = 8.0; 
 
-  // Estados Globais
+  // =========================================================================
+  // ESTADOS GLOBAIS E DE DATAS
+  // =========================================================================
   bool _isQuadrimestral = false;
   bool _isEstagio = false;
   bool _contaPresenca = true;
 
+  // 🟢 FONTES DO MINI CALENDÁRIO
+  final double _tamanhoFonteCalendarioDias = 12.0; 
+  final double _tamanhoFonteCalendarioNumeros = 15.0; 
+
+  // 🟢 VARIÁVEIS PARA O MINI CALENDÁRIO INLINE E CÉDULAS
+  bool _isCalendarExpanded = false;
+  int _tapStep = 2; // 0 = Início, 1 = Fim, 2 = Completo
+  DateTime _mesExibido = DateTime.now();
+
+  DateTime _dataInicio = DateTime.now();
+  DateTime _dataFim = DateTime.now().add(const Duration(days: 120));
+  
+  bool _selecionouInicio = false;
+  bool _selecionouFim = false;
+  
+  final _inicioDataCtrl = TextEditingController(); final _inicioDataFocus = FocusNode();
+  final _fimDataCtrl = TextEditingController(); final _fimDataFocus = FocusNode();
+
   bool _isDeptExpanded = false;
   bool _isInstitutoExpanded = false;
-  // 🟢 NOMES POR EXTENSO!
+
   final List<String> _institutos = [
     'POLI - Escola Politécnica', 
     'IME - Inst. de Matemática e Estatística', 
@@ -131,71 +149,34 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     'ICG - Instituto de Geociências'
   ];
   
-  // 🟢 AS CHAVES DO DICIONÁRIO AGORA ACOMPANHAM O NOME POR EXTENSO
   final Map<String, List<String>> _bancoDeDepartamentos = {
     'POLI - Escola Politécnica': [
-        'PCC - Eng. de Construção Civil',
-        'PCS - Eng. de Computação e Sistemas Digitais',
-        'PEA - Eng. de Energia e Automação Elétricas',
-        'PEF - Eng. de Estruturas e Geotécnica',
-        'PHA - Eng. Hidráulica e Ambiental',
-        'PME - Eng. Mecânica',
-        'PMI - Eng. de Minas e de Petróleo',
-        'PMR - Eng. Mecatrônica e Sistemas Mecânicos',
-        'PMT - Eng. Metalúrgica e de Materiais',
-        'PNV - Eng. Naval e Oceânica',
-        'PQI - Eng. Química',
-        'PRO - Eng. de Produção',
-        'PSI - Eng. de Sistemas Eletrônicos',
-        'PTC - Eng. de Telecomunicações e Controle',
-        'PTR - Eng. de Transportes'
+        'PCC - Eng. de Construção Civil', 'PCS - Eng. de Computação e Sistemas Digitais', 'PEA - Eng. de Energia e Automação Elétricas',
+        'PEF - Eng. de Estruturas e Geotécnica', 'PHA - Eng. Hidráulica e Ambiental', 'PME - Eng. Mecânica', 'PMI - Eng. de Minas e de Petróleo',
+        'PMR - Eng. Mecatrônica e Sistemas Mecânicos', 'PMT - Eng. Metalúrgica e de Materiais', 'PNV - Eng. Naval e Oceânica',
+        'PQI - Eng. Química', 'PRO - Eng. de Produção', 'PSI - Eng. de Sistemas Eletrônicos', 'PTC - Eng. de Telecomunicações e Controle', 'PTR - Eng. de Transportes'
     ],
-    'IME - Inst. de Matemática e Estatística': [
-        'MAC - Ciência da Computação',
-        'MAE - Estatística',
-        'MAP - Matemática Aplicada',
-        'MAT - Matemática'
-    ],
-    'IF - Instituto de Física': [
-        'FAP - Física Aplicada',
-        'FEP - Física Experimental',
-        'FGE - Física Geral',
-        'FMA - Física Matemática',
-        'FMT - Física de Materiais e Mecânica',
-        'FNC - Física Nuclear'
-    ],
-    'IQ - Instituto de Química': [
-        'QBQ - Bioquímica',
-        'QFL - Química Fundamental'
-    ],
-    'IGc - Instituto de Geociências': [
-        'GAA - Geologia Ambiental e Aplicada',
-        'GMG - Mineralogia e Geotectônica'
-    ]
+    'IME - Inst. de Matemática e Estatística': [ 'MAC - Ciência da Computação', 'MAE - Estatística', 'MAP - Matemática Aplicada', 'MAT - Matemática' ],
+    'IF - Instituto de Física': [ 'FAP - Física Aplicada', 'FEP - Física Experimental', 'FGE - Física Geral', 'FMA - Física Matemática', 'FMT - Física de Materiais e Mecânica', 'FNC - Física Nuclear' ],
+    'IQ - Instituto de Química': [ 'QBQ - Bioquímica', 'QFL - Química Fundamental' ],
+    'ICG - Instituto de Geociências': [ 'GAA - Geologia Ambiental e Aplicada', 'GMG - Mineralogia e Geotectônica' ]
   };
 
-  // Estados Especiais: Roleta de Cassino (Créditos)
   bool _isCreditoTyping = false;
   int _creditoValue = 1;
   late FixedExtentScrollController _creditoScrollController;
   
   final ScrollController _mainScrollController = ScrollController();
 
-  // =========================================================================
-  // 📝 CONTROLADORES ESTÁTICOS
-  // =========================================================================
   final _codigoController = TextEditingController(); final _codigoFocus = FocusNode();
   final _nomeController = TextEditingController(); final _nomeFocus = FocusNode();
   final _institutoController = TextEditingController(); final _institutoFocus = FocusNode();
   final _creditoController = TextEditingController(); final _creditoFocus = FocusNode();
   final _departamentoController = TextEditingController(); final _departamentoFocus = FocusNode();
   final _ementaController = TextEditingController(); final _ementaFocus = FocusNode();
-  
-  // 🟢 FÓRMULA ÚNICA (Sem texto pré-preenchido, apenas sugestão/hint)
   final _formulaController = TextEditingController(); final _formulaFocus = FocusNode();
   final _avisosController = TextEditingController(); final _avisosFocus = FocusNode();
 
-  // 🟢 CONTROLADORES DINÂMICOS DAS TURMAS
   List<TurmaInputData> _turmas = [];
 
   void _atualizarTela() {
@@ -204,41 +185,63 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
 
   void _resetarTudo() {
     setState(() {
-      _codigoController.clear();
-      _nomeController.clear();
-      _institutoController.clear();
-      _departamentoController.clear();
-      _ementaController.clear();
-      _formulaController.clear(); 
+      _codigoController.clear(); _nomeController.clear(); _institutoController.clear();
+      _departamentoController.clear(); _ementaController.clear(); _formulaController.clear(); 
       _avisosController.clear();
       
-      _isQuadrimestral = false;
-      _isEstagio = false; 
-      _contaPresenca = false;
-      _isDeptExpanded = false;
-      _isInstitutoExpanded = false; 
+      _inicioDataCtrl.clear(); _fimDataCtrl.clear();
+      _selecionouInicio = false; _selecionouFim = false; _tapStep = 2;
+
+      _isQuadrimestral = false; _isEstagio = false; _contaPresenca = false;
+      _isDeptExpanded = false; _isInstitutoExpanded = false; 
       
       _isAddingAvaliacao = false;
-      _avaliacoes = [
-        AvaliacaoData('P1', true),
-        AvaliacaoData('P2', false),
-        AvaliacaoData('T1', false),
-      ];
+      _avaliacoes = [AvaliacaoData('P1', true), AvaliacaoData('P2', false), AvaliacaoData('T1', false)];
       
       for (var t in _turmas) { t.dispose(); }
       _turmas.clear();
-      
       var turmaMestra = TurmaInputData(onUpdate: _atualizarTela);
       turmaMestra.iniciarListeners();
       _turmas.add(turmaMestra);
     });
   }
 
+  void _parseDataManual(TextEditingController ctrl, bool isInicio) {
+    if (ctrl.text.length >= 8) { 
+      try {
+        List<String> parts = ctrl.text.split('/');
+        int d = int.parse(parts[0]); int m = int.parse(parts[1]); int y = int.parse(parts[2]);
+        if (y < 100) y += 2000;
+        DateTime parsed = DateTime(y, m, d);
+        
+        setState(() {
+          if (isInicio) {
+            _dataInicio = parsed; _selecionouInicio = true; _tapStep = 1;
+            if (_selecionouFim && _dataFim.isBefore(_dataInicio)) {
+              _dataFim = _dataInicio;
+              _fimDataCtrl.text = DateFormat('dd/MM/yy').format(_dataFim);
+            }
+            _mesExibido = DateTime(_dataInicio.year, _dataInicio.month, 1);
+          } else {
+            if (parsed.isBefore(_dataInicio)) {
+              _dataFim = _dataInicio; _fimDataCtrl.text = DateFormat('dd/MM/yy').format(_dataFim);
+            } else {
+              _dataFim = parsed; _selecionouFim = true; _tapStep = 2;
+            }
+            _mesExibido = DateTime(_dataFim.year, _dataFim.month, 1);
+          }
+        });
+      } catch (_) {}
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-
     _turmas.add(TurmaInputData(onUpdate: _atualizarTela));
+
+    _inicioDataFocus.addListener(() { if (!_inicioDataFocus.hasFocus) _parseDataManual(_inicioDataCtrl, true); });
+    _fimDataFocus.addListener(() { if (!_fimDataFocus.hasFocus) _parseDataManual(_fimDataCtrl, false); });
 
     _newAvaliacaoFocus.addListener(() {
       if (_newAvaliacaoFocus.hasFocus) {
@@ -258,9 +261,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
       }
     });
 
-    // 🟢 Tiramos o foco de Crédito, Instituto e Departamento daqui
-    final todosFocosEstaticos = [_codigoFocus, _nomeFocus, _ementaFocus, _formulaFocus, _avisosFocus];
-    
+    final todosFocosEstaticos = [_codigoFocus, _nomeFocus, _ementaFocus, _formulaFocus, _avisosFocus, _inicioDataFocus, _fimDataFocus];
     for (var foco in todosFocosEstaticos) {
       foco.addListener(() {
         if (foco.hasFocus) {
@@ -277,28 +278,191 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
 
   @override
   void dispose() {
-    _mainScrollController.dispose();
-    _codigoController.dispose();
-    _nomeController.dispose();
-    _institutoController.dispose();
-    _departamentoController.dispose();
-    _ementaController.dispose();
-    _formulaController.dispose();
-    _avisosController.dispose();
-    
-    _codigoFocus.dispose();
-    _nomeFocus.dispose();
-    _institutoFocus.dispose();
-    _departamentoFocus.dispose();
-    _ementaFocus.dispose();
-    _formulaFocus.dispose();
-    _avisosFocus.dispose();
-
-    _newAvaliacaoCtrl.dispose();
-    _newAvaliacaoFocus.dispose();
-
+    _mainScrollController.dispose(); _codigoController.dispose(); _nomeController.dispose();
+    _institutoController.dispose(); _departamentoController.dispose(); _ementaController.dispose();
+    _formulaController.dispose(); _avisosController.dispose(); _inicioDataCtrl.dispose(); _fimDataCtrl.dispose();
+    _codigoFocus.dispose(); _nomeFocus.dispose(); _institutoFocus.dispose(); _departamentoFocus.dispose(); 
+    _ementaFocus.dispose(); _formulaFocus.dispose(); _avisosFocus.dispose(); _inicioDataFocus.dispose(); _fimDataFocus.dispose();
+    _newAvaliacaoCtrl.dispose(); _newAvaliacaoFocus.dispose();
     for (var t in _turmas) { t.dispose(); }
     super.dispose();
+  }
+
+  // =========================================================================
+  // 🚀 MOTOR DE SALVAMENTO (UI -> FIREBASE)
+  // =========================================================================
+  Future<void> _salvarDisciplina() async {
+    if (_codigoController.text.trim().isEmpty || _nomeController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Código e Nome da disciplina são obrigatórios!'), backgroundColor: Colors.red));
+      return;
+    }
+
+    setState(() => _isLoadingSave = true);
+
+    try {
+      List<Turma> turmasMapeadas = [];
+      for (int i = 0; i < _turmas.length; i++) {
+        var turmaData = _turmas[i];
+        List<HorarioAula> horariosMapeados = turmaData.horarios.map((horData) {
+          return HorarioAula(
+            dia: horData.diaCtrl.text.trim().toUpperCase(),
+            inicio: horData.inicioCtrl.text.trim(),
+            fim: horData.fimCtrl.text.trim(),
+            local: horData.salaCtrl.text.trim(),
+            isLaboratorio: horData.isLaboratorio,
+            frequenciaLab: horData.frequenciaLab,
+            datasCustomizadas: horData.datasSelecionadas.map((d) => "${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}").toList(),
+            precisaEpi: horData.precisaEpi,
+            epis: horData.epis.where((e) => e.ativo).map((e) => e.nome).toList(),
+          );
+        }).toList();
+
+        turmasMapeadas.add(Turma(
+          id: 'T${DateTime.now().millisecondsSinceEpoch}$i',
+          codigo: turmaData.codigoCtrl.text.trim().isEmpty ? 'T0${i+1}' : turmaData.codigoCtrl.text.trim(),
+          professores: turmaData.professores.map((p) => p.nomeCtrl.text.trim()).where((nome) => nome.isNotEmpty).toList(),
+          horarios: horariosMapeados,
+        ));
+      }
+
+      final novaDisciplina = Disciplina(
+        id: '',
+        codigo: _codigoController.text.trim().toUpperCase(),
+        nome: _nomeController.text.trim().toUpperCase(),
+        instituto: _institutoController.text.trim(),
+        departamento: _departamentoController.text.trim(),
+        ementa: _ementaController.text.trim(),
+        isQuadrimestral: _isQuadrimestral,
+        isEstagio: _isEstagio,
+        contaPresenca: _contaPresenca,
+        avaliacoesAtivas: _avaliacoes.where((a) => a.ativo).map((a) => a.nome).toList(),
+        formulaFinal: _formulaController.text.trim(),
+        avisosGerais: _avisosController.text.trim(),
+        turmas: turmasMapeadas,
+        cor: const Color(0xFF0460E9), 
+        isVerificada: false, 
+        numeroInscritos: 0,
+        dataInicio: Timestamp.fromDate(_selecionouInicio ? _dataInicio : DateTime.now()),
+        dataFim: Timestamp.fromDate(_selecionouFim ? _dataFim : DateTime.now().add(const Duration(days: 120))),
+        totalAulasEstimadas: 30,
+      );
+
+      await FirestoreService().createDisciplinaGlobal(novaDisciplina);
+
+      if (mounted) {
+        FocusScope.of(context).unfocus(); 
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina criada e enviada ao Hub com sucesso!'), backgroundColor: Colors.green));
+        Navigator.of(context).pop(); 
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao salvar disciplina: $e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingSave = false);
+    }
+  }
+
+  // =========================================================================
+  // 📅 MOTOR DO MINI-CALENDÁRIO INLINE (SELEÇÃO DE INTERVALO)
+  // =========================================================================
+  void _mudarMes(int delta) {
+    setState(() => _mesExibido = DateTime(_mesExibido.year, _mesExibido.month + delta, 1));
+  }
+
+  void _onDayTapped(DateTime date) {
+    setState(() {
+      if (_tapStep == 0 || _tapStep == 2) {
+        // Primeiro Toque
+        _dataInicio = date;
+        _dataFim = date; 
+        _selecionouInicio = true;
+        _selecionouFim = false; 
+        _tapStep = 1;
+        
+        _inicioDataCtrl.text = DateFormat('dd/MM/yy').format(date);
+        _fimDataCtrl.clear();
+      } else if (_tapStep == 1) {
+        // Segundo Toque 
+        if (date.isBefore(_dataInicio)) {
+          _dataFim = _dataInicio;
+          _dataInicio = date;
+          _inicioDataCtrl.text = DateFormat('dd/MM/yy').format(_dataInicio);
+        } else {
+          _dataFim = date;
+        }
+        _selecionouFim = true;
+        _tapStep = 2;
+        
+        _fimDataCtrl.text = DateFormat('dd/MM/yy').format(_dataFim);
+      }
+    });
+  }
+
+  Widget _buildMiniCalendar() {
+    const meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+    DateTime firstDay = DateTime(_mesExibido.year, _mesExibido.month, 1);
+    int weekdayOffset = firstDay.weekday % 7; 
+    int daysInMonth = DateTime(_mesExibido.year, _mesExibido.month + 1, 0).day;
+    
+    List<Widget> dayWidgets = [];
+    final weekdays = ['D','S','T','Q','Q','S','S'];
+    for(var wd in weekdays) {
+      dayWidgets.add(Center(child: Text(wd, style: TextStyle(fontFamily: 'Aristotelica', color: _corDicaInput, fontSize: _tamanhoFonteCalendarioDias, fontWeight: FontWeight.w900))));
+    }
+    for(int i = 0; i < weekdayOffset; i++) { dayWidgets.add(const SizedBox()); }
+    
+    for(int i = 1; i <= daysInMonth; i++) {
+      DateTime current = DateTime(_mesExibido.year, _mesExibido.month, i);
+      bool isStart = _selecionouInicio && current.year == _dataInicio.year && current.month == _dataInicio.month && current.day == _dataInicio.day;
+      bool isEnd = _selecionouFim && current.year == _dataFim.year && current.month == _dataFim.month && current.day == _dataFim.day;
+      bool inRange = _selecionouInicio && _selecionouFim && current.isAfter(_dataInicio.subtract(const Duration(days: 1))) && current.isBefore(_dataFim.add(const Duration(days: 1)));
+      
+      Color bgColor = Colors.transparent;
+      Color textColor = _corTextoDigitado;
+      
+      if (isStart || isEnd) {
+        bgColor = _corDestaque;
+        textColor = Colors.white;
+      } else if (inRange) {
+        bgColor = _corDestaque.withOpacity(0.15);
+      }
+      
+      dayWidgets.add(
+        GestureDetector(
+          onTap: () => _onDayTapped(current),
+          child: Container(
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(isStart || isEnd ? 6.0 : 4.0)),
+            alignment: Alignment.center,
+            child: Text('$i', style: TextStyle(fontFamily: 'Aristotelica', color: textColor, fontWeight: FontWeight.w700, fontSize: _tamanhoFonteCalendarioNumeros)),
+          ),
+        )
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: _corFundoInput, border: Border.all(color: _isCalendarExpanded ? _corBordaFocada : _corBordaInativa, width: 1.5), borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(icon: Icon(Icons.chevron_left, color: _corLabel, size: 28), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _mudarMes(-1)),
+              Text('${meses[_mesExibido.month - 1]} ${_mesExibido.year}', style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w900, color: _corPrincipal, fontSize: 15)),
+              IconButton(icon: Icon(Icons.chevron_right, color: _corLabel, size: 28), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _mudarMes(1)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.count(
+            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 7, childAspectRatio: 1.2,
+            children: dayWidgets,
+          ),
+        ]
+      ),
+    );
   }
 
   @override
@@ -333,7 +497,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                     padding: EdgeInsets.only(
                         left: _paddingLateralTela, right: _paddingLateralTela, 
                         top: 10.0, 
-                        // 🟢 Substituído pelos valores controlados (antes era 100.0 fixo)
                         bottom: keyboardHeight > 0 ? keyboardHeight + 40.0 : _espacoAbaixoSalvar,
                       ),
                     child: Column(
@@ -380,7 +543,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
               _buildRealTextField(hint: 'EX: FENÔMENOS PARANORMAIS', controller: _nomeController, focusNode: _nomeFocus),
               SizedBox(height: _espacoInputAteProximoTitulo),
               
-              // 🟢 CRÉDITOS REMOVIDOS. INSTITUTO ESTICA DE PONTA A PONTA!
               _buildLabel('INSTITUTO'),
               _buildInstitutoDropdown(), 
               SizedBox(height: _espacoInputAteProximoTitulo),
@@ -399,7 +561,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                   SizedBox(width: _espacoToggleAteTexto),
                   Transform.translate(
                     offset: Offset(0, _deslocamentoVerticalTextoToggle),
-                    child: Text('É QUADRIMESTRAL', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel, height: 1.0)),
+                    child: Text('QUADRIMESTRAL', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel, height: 1.0)),
                   ),
                 ],
               ),
@@ -430,22 +592,68 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildSectionTitle('TURMAS & HORÁRIOS', marginBottom: _espacoSecaoAteCaixa),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      var novaTurma = TurmaInputData(onUpdate: _atualizarTela);
-                      novaTurma.iniciarListeners(); 
-                      _turmas.add(novaTurma);
-                    });
-                  },
-                  child: Text('+ NOVA TURMA', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoNovaTurma, color: const Color(0xFF969AA0))),
-                ),
-              ],
+            // 🟢 CALENDÁRIO COM CÉDULAS DE DIGITAÇÃO INTELIGENTES
+            _buildSectionTitle('PERÍODO DA DISCIPLINA'),
+            _buildOutlinedBox(
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildRealTextField(
+                          hint: 'INÍCIO', 
+                          controller: _inicioDataCtrl, 
+                          focusNode: _inicioDataFocus, 
+                          alignCenter: true, 
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [DateTextFormatter()]
+                        )
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildRealTextField(
+                          hint: 'FINAL', 
+                          controller: _fimDataCtrl, 
+                          focusNode: _fimDataFocus, 
+                          alignCenter: true, 
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [DateTextFormatter()]
+                        )
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () {
+                          FocusScope.of(context).unfocus();
+                          setState(() => _isCalendarExpanded = !_isCalendarExpanded);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          height: 47, width: 47,
+                          decoration: BoxDecoration(
+                            color: _isCalendarExpanded ? _corDestaque : _corFundoInput,
+                            border: Border.all(color: _isCalendarExpanded ? _corDestaque : _corBordaInativa, width: 1.5),
+                            borderRadius: BorderRadius.circular(6.7),
+                          ),
+                          child: Icon(Icons.calendar_month_rounded, color: _isCalendarExpanded ? Colors.white : _corLabel),
+                        ),
+                      ),
+                    ],
+                  ),
+                  AnimatedCrossFade(
+                    duration: const Duration(milliseconds: 300),
+                    crossFadeState: _isCalendarExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                    firstChild: const SizedBox(width: double.infinity, height: 0),
+                    secondChild: Padding(
+                      padding: const EdgeInsets.only(top: 12.0),
+                      child: _buildMiniCalendar(),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            SizedBox(height: _espacoEntreSecoes),
+
+            _buildSectionTitle('TURMAS & HORÁRIOS', marginBottom: _espacoSecaoAteCaixa), 
             
             ..._turmas.asMap().entries.map((entry) {
               int indexTurma = entry.key;
@@ -517,7 +725,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                             ],
                           ),
                         );
-                      }),
+                      }).toList(),
                       _buildNovoBotaoAcao('+ ADD', () => setState(() {
                         var novoProf = ProfessorInputData(onUpdate: _atualizarTela);
                         novoProf.iniciarListeners(); 
@@ -558,24 +766,32 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                             ],
                           ),
                         );
-                      }),
+                      }).toList(),
                       _buildNovoBotaoAcao('+ ADD', () => setState(() {
                         var novoHor = HorarioInputData(onUpdate: _atualizarTela);
                         novoHor.iniciarListeners(); 
                         turma.horarios.add(novoHor);
                       })),
-                      SizedBox(height: _espacoInputAteProximoTitulo),
                       
-                      _buildNovoBotaoAcao('GERENCIAR EXCEÇÕES', () {}, expandir: true),
+                      // 🟢 BOTÃO GERENCIAR EXCEÇÕES FOI TOTALMENTE REMOVIDO DAQUI
+                      
+                      if (isLast) ...[
+                        SizedBox(height: _espacoInputAteProximoTitulo),
+                        _buildNovoBotaoAcao('+ CRIAR NOVA TURMA', () => setState(() {
+                          var novaTurma = TurmaInputData(onUpdate: _atualizarTela);
+                          novaTurma.iniciarListeners(); 
+                          _turmas.add(novaTurma);
+                        }), expandir: true),
+                      ]
                     ],
                   ),
                 ),
               );
-            }),
+            }).toList(),
           ],
         ),
       ),
-    ); // 🟢 Fechamentos corrigidos!
+    );
   }
 
   Widget _buildSectionLogisticaLaboratorio() {
@@ -740,7 +956,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                                                                     else hor.datasSelecionadas.add(d);
                                                                   });
                                                                 },
-                                                                // 🟢 MÁGICA: Borda e gradiente iguais aos botões de EPI!
                                                                 child: AnimatedContainer(
                                                                   duration: const Duration(milliseconds: 200),
                                                                   width: 58, 
@@ -897,7 +1112,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 30),
                 alignment: Alignment.center,
-                // 🟢 MÁGICA DO "EM BREVE": Fonte Aristotelica, tamanho 19!
                 child: Text('EM BREVE', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 19, color: _corBordaInativa, letterSpacing: 2.0)),
               )
             : Column(
@@ -972,16 +1186,21 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
         
         SizedBox(height: _espacoAvisosAteSalvar),
         GestureDetector(
-          onTap: () {
-            FocusScope.of(context).unfocus(); 
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina salva com sucesso!')));
-            Navigator.of(context).pop();
-          },
+          onTap: _isLoadingSave ? null : _salvarDisciplina, 
           child: Container(
             height: _alturaBotaoSalvar, width: double.infinity,
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF7C9F19), Color(0xFFAFCB00)], begin: Alignment.centerLeft, end: Alignment.centerRight), border: Border.all(color: const Color(0xFFCEDD26), width: 1.7), borderRadius: BorderRadius.circular(6.7)),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF7C9F19), Color(0xFFAFCB00)], begin: Alignment.centerLeft, end: Alignment.centerRight), 
+              border: Border.all(color: const Color(0xFFCEDD26), width: 1.7), 
+              borderRadius: BorderRadius.circular(6.7)
+            ),
             alignment: Alignment.center,
-            child: const Padding(padding: EdgeInsets.only(top: 3.0), child: Text('SALVAR DISCIPLINA', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF303B02), letterSpacing: 1.2))),
+            child: _isLoadingSave 
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF303B02)))
+                : const Padding(
+                    padding: EdgeInsets.only(top: 3.0), 
+                    child: Text('SALVAR DISCIPLINA', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF303B02), letterSpacing: 1.2))
+                  ),
           ),
         ),
       ],
@@ -1028,19 +1247,20 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     required String hint, 
     required TextEditingController controller, 
     required FocusNode focusNode, 
-    int? minLines = 1, // 🟢 Adicionado para controlar a altura mínima (O padrão é 1)
-    int? maxLines = 1, // 🟢 Agora aceita mais linhas
+    int? minLines = 1,
+    int? maxLines = 1,
     TextAlign textAlign = TextAlign.start, 
     bool alignCenter = false,
     TextInputType keyboardType = TextInputType.text,
     FocusNode? nextFocus,
     ValueChanged<String>? onChanged, 
+    List<TextInputFormatter>? inputFormatters, // 🟢 Habilita a formatação (ex: colocar barra '/' na data)
   }) {
     final bool isPreenchido = controller.text.isNotEmpty;
-    final bool isMultiline = minLines != null && minLines > 1; // Verifica se é uma caixa grande
+    final bool isMultiline = minLines != null && minLines > 1;
     
     return SizedBox(
-      height: !isMultiline ? 47 : null, // 🟢 Só trava a altura em 47px se for caixa de 1 linha!
+      height: !isMultiline ? 47 : null,
       child: TextField(
         controller: controller,
         focusNode: focusNode,
@@ -1048,13 +1268,14 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
         maxLines: maxLines,
         onChanged: onChanged,
         textAlign: alignCenter ? TextAlign.center : textAlign,
-        keyboardType: isMultiline ? TextInputType.multiline : keyboardType, // 🟢 Habilita quebra de linha no teclado do celular
+        keyboardType: isMultiline ? TextInputType.multiline : keyboardType,
         textInputAction: nextFocus != null ? TextInputAction.next : (isMultiline ? TextInputAction.newline : TextInputAction.done),
+        inputFormatters: inputFormatters, // 🟢 Aplica os formatadores
         onSubmitted: (_) { 
           if (nextFocus != null) { FocusScope.of(context).requestFocus(nextFocus); } else if (!isMultiline) { FocusScope.of(context).unfocus(); } 
         },
         style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoFonteDigitada, color: _corTextoDigitado),
-        textAlignVertical: isMultiline ? TextAlignVertical.top : TextAlignVertical.center, // 🟢 Joga o texto pro topo em caixas grandes
+        textAlignVertical: isMultiline ? TextAlignVertical.top : TextAlignVertical.center,
         cursorColor: _corBordaFocada, 
         cursorWidth: 2.5, cursorHeight: 20, cursorRadius: const Radius.circular(5.0),
         decoration: InputDecoration(
@@ -1063,7 +1284,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
           contentPadding: EdgeInsets.only(
             left: 11.0, right: 11.0, 
             top: 15.0, 
-            bottom: isMultiline ? 15.0 : 2.0 // 🟢 Caixas grandes ganham mais respiro na parte de baixo
+            bottom: isMultiline ? 15.0 : 2.0
           ),
           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6.7), borderSide: BorderSide(color: isPreenchido ? const Color(0xFFA1BF06) : _corBordaInativa, width: 1.5)),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6.7), borderSide: BorderSide(color: _corBordaFocada, width: 2.0)),
@@ -1135,22 +1356,19 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
               secondChild: Column(
                 children: [
                   Container(height: 1.5, color: _corBordaInativa.withOpacity(0.3)), 
-                  
-                  // 🟢 MÁGICA: Limita a altura, cria o Scroll e aplica o Fade de esmaecimento!
                   Container(
                     constraints: const BoxConstraints(maxHeight: 220), 
                     child: ShaderMask(
                       shaderCallback: (Rect bounds) {
                         return const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+                          begin: Alignment.topCenter, end: Alignment.bottomCenter,
                           colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
-                          stops: [0.0, 0.05, 0.95, 1.0], // Fade bem suave só nas beiradinhas
+                          stops: [0.0, 0.05, 0.95, 1.0], 
                         ).createShader(bounds);
                       },
                       blendMode: BlendMode.dstIn,
                       child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(), // Scroll suave estilo iOS
+                        physics: const BouncingScrollPhysics(),
                         child: Column(
                           children: _institutos.map((inst) {
                             return InkWell(
@@ -1256,15 +1474,12 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                 secondChild: Column(
                   children: [
                     Container(height: 1.5, color: _corBordaInativa.withOpacity(0.3)),
-                    
-                    // 🟢 MÁGICA REPLICADA: MaxHeight, BouncingScroll e ShaderMask com Fade!
                     Container(
                       constraints: const BoxConstraints(maxHeight: 220),
                       child: ShaderMask(
                         shaderCallback: (Rect bounds) {
                           return const LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
+                            begin: Alignment.topCenter, end: Alignment.bottomCenter,
                             colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
                             stops: [0.0, 0.05, 0.95, 1.0], 
                           ).createShader(bounds);
@@ -1308,42 +1523,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     );
   }
 
-  Widget _buildCreditoCasinoWidget() {
-    if (_isCreditoTyping) {
-      return _buildRealTextField(hint: '1', controller: _creditoController, focusNode: _creditoFocus, keyboardType: TextInputType.number, alignCenter: true);
-    }
-    return GestureDetector(
-      onTap: () {
-        setState(() => _isCreditoTyping = true);
-        FocusScope.of(context).requestFocus(_creditoFocus);
-      },
-      child: Container(
-        height: 47,
-        decoration: BoxDecoration(color: _corFundoInput, borderRadius: BorderRadius.circular(6.7), border: Border.all(color: _corBordaInativa, width: 1.5)),
-        // 🟢 REMOVIDO O ROW E A SETINHA. AGORA CENTRALIZA PERFEITO IGUAL OS HORÁRIOS!
-        child: ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            begin: Alignment.topCenter, end: Alignment.bottomCenter,
-            colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
-            stops: [0.0, 0.15, 0.55, 1.0], 
-          ).createShader(bounds),
-          blendMode: BlendMode.dstIn,
-          child: ListWheelScrollView.useDelegate(
-            controller: _creditoScrollController,
-            itemExtent: 30, physics: const FixedExtentScrollPhysics(), overAndUnderCenterOpacity: 1.0, 
-            onSelectedItemChanged: (index) { _creditoValue = index; _creditoController.text = index.toString(); },
-            childDelegate: ListWheelChildBuilderDelegate(
-              builder: (context, index) {
-                return Center(child: Text('$index Č', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoFonteDigitada, color: _corTextoDigitado, height: 1.0)));
-              },
-              childCount: 41, 
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildDiaCasinoWidget(HorarioInputData hor) {
     return GestureDetector(
       onTap: () {
@@ -1379,8 +1558,8 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
 
   Widget _buildTimeCasinoWidget(HorarioInputData hor, bool isFim) {
     int minTime = isFim ? hor.inicioVal + 10 : 450; 
-    int maxTime = isFim ? 1120 : 1070; 
-    if (minTime > maxTime) minTime = maxTime; 
+    int maxTime = isFim ? 1380 : 1370; 
+    if (minTime > maxTime) minTime = maxTime;
 
     int totalItems = ((maxTime - minTime) ~/ 10) + 1;
     if (totalItems < 1) totalItems = 1;
@@ -1470,13 +1649,11 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
 
   Widget _buildToggle({required bool valor, required ValueChanged<bool> onChanged, bool isEnabled = true}) {
     return GestureDetector(
-      // 🟢 Se estiver desativado (travado), ignoramos o toque
       onTap: isEnabled ? () => onChanged(!valor) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: _larguraToggle, height: _alturaToggle, padding: EdgeInsets.all(_paddingInternoToggle),
         decoration: BoxDecoration(
-          // 🟢 Fica transparente/desbotado se estiver travado
           color: isEnabled 
               ? (valor ? _corDestaque : _corFundoToggleInativo) 
               : _corFundoToggleInativo.withOpacity(0.5), 
@@ -1608,7 +1785,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
                         setState(() => hor.frequenciaLab = 3);
-                        // 🟢 Removida a chamada do _abrirCalendarioCustom. Ele apenas muda o estado.
                       },
                       child: const Center(child: Icon(Icons.edit_rounded, color: Colors.white, size: 20)),
                     ),
@@ -1662,7 +1838,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 🟢 COMPLETAMENTE LIVRE DE 'const' PARA NÃO DAR ERRO DE CONSTRUTOR!
                     RichText(
                       textAlign: TextAlign.right,
                       text: const TextSpan(
@@ -1690,6 +1865,24 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
 // 🧠 FUNÇÕES GLOBAIS DE TEMPO E MODELOS DE DADOS PARA A LISTA DINÂMICA
 // =========================================================================
 
+// 🟢 NOVO: FORMATADOR DE DATAS (Coloca as barras / sozinho enquanto digita)
+class DateTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    String text = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (text.length > 6) text = text.substring(0, 6);
+    StringBuffer buffer = StringBuffer();
+    for (int i = 0; i < text.length; i++) {
+      buffer.write(text[i]);
+      if ((i == 1 || i == 3) && i != text.length - 1) {
+        buffer.write('/');
+      }
+    }
+    String result = buffer.toString();
+    return newValue.copyWith(text: result, selection: TextSelection.collapsed(offset: result.length));
+  }
+}
+
 String _formatMinsToTime(int mins) {
   int h = mins ~/ 60;
   int m = mins % 60;
@@ -1706,7 +1899,6 @@ int _parseTimeToMins(String timeStr) {
   return h * 60 + m;
 }
 
-// 🟢 Ferramenta que injeta o auto-scroll (puxar pra cima) nas caixas geradas via "+ ADD"
 void _aplicarAutoScroll(FocusNode focus) {
   focus.addListener(() {
     if (focus.hasFocus) {
@@ -1751,7 +1943,7 @@ class TurmaInputData {
 
   TurmaInputData({required this.onUpdate}) {
     codigoFocus.addListener(onUpdate);
-    _aplicarAutoScroll(codigoFocus); // 🟢 Auto-scroll garantido para Código da Turma
+    _aplicarAutoScroll(codigoFocus);
     
     var prof = ProfessorInputData(onUpdate: onUpdate);
     prof.iniciarListeners();
@@ -1783,7 +1975,7 @@ class ProfessorInputData {
   final VoidCallback onUpdate;
 
   ProfessorInputData({required this.onUpdate}) {
-    _aplicarAutoScroll(nomeFocus); // 🟢 Auto-scroll garantido para Professores novos!
+    _aplicarAutoScroll(nomeFocus); 
   }
 
   void iniciarListeners() {
@@ -1839,7 +2031,7 @@ class HorarioInputData {
     inicioScroll = FixedExtentScrollController(initialItem: (inicioVal - 450) ~/ 10);
     fimScroll = FixedExtentScrollController(initialItem: (fimVal - (inicioVal + 10)) ~/ 10);
     
-    _aplicarAutoScroll(salaFocus); // 🟢 Auto-scroll garantido para Salas novas!
+    _aplicarAutoScroll(salaFocus);
   }
 
   void iniciarListeners() {
@@ -1862,13 +2054,13 @@ class HorarioInputData {
         inicioVal = (inicioVal ~/ 5) * 5; 
         
         if (inicioVal < 450) inicioVal = 450;
-        if (inicioVal > 1070) inicioVal = 1070; 
+        if (inicioVal > 1370) inicioVal = 1370; 
         
         inicioCtrl.text = _formatMinsToTime(inicioVal);
         
         if (fimVal <= inicioVal) {
           fimVal = inicioVal + 10;
-          if (fimVal > 1120) fimVal = 1120;
+          if (fimVal > 1380) fimVal = 1380;
           fimCtrl.text = _formatMinsToTime(fimVal);
         }
 
@@ -1877,7 +2069,7 @@ class HorarioInputData {
         inicioScroll = FixedExtentScrollController(initialItem: (roundedInicio10 - 450) ~/ 10);
 
         int minFimPermitido = inicioVal + 10;
-        if(minFimPermitido > 1120) minFimPermitido = 1120;
+        if(minFimPermitido > 1380) minFimPermitido = 1380;
         
         int fimRounded10 = (fimVal / 10).round() * 10;
         int novoIndexFim = (fimRounded10 - minFimPermitido) ~/ 10;
@@ -1897,7 +2089,7 @@ class HorarioInputData {
         
         int minFimPermitido = inicioVal + 10;
         if (fimVal < minFimPermitido) fimVal = minFimPermitido; 
-        if (fimVal > 1120) fimVal = 1120;
+        if (fimVal > 1380) fimVal = 1380;
 
         fimCtrl.text = _formatMinsToTime(fimVal);
 
@@ -1919,7 +2111,7 @@ class HorarioInputData {
           if (newEpiFocus.context != null) {
             Scrollable.ensureVisible(
               newEpiFocus.context!,
-              alignment: 0.3, // 🟢 Consertado: Era 1.0, por isso puxava a tela pra baixo em vez de pra cima!
+              alignment: 0.3, 
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOutCubic,
             );
@@ -1943,7 +2135,6 @@ class HorarioInputData {
     diaScroll.dispose(); inicioScroll.dispose(); fimScroll.dispose();
   }
 
-  // 🟢 NOVA FUNÇÃO QUE GERA AS DATAS PARA OS QUADRADINHOS IN-LINE
   List<DateTime> obterDatasSemestre() {
     List<DateTime> dates = [];
     DateTime hoje = DateTime.now();

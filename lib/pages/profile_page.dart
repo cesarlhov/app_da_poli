@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:app_da_poli/services/supabase_service.dart';
+import 'package:app_da_poli/pages/admin_usuarios_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -83,24 +84,38 @@ class ProfilePage extends StatelessWidget {
               icon: Icons.edit_outlined,
               onPressed: () => showDialog(context: context, builder: (context) => EditProfileDialog(currentUser: user)),
             ),
-            
+
             if (isAdmin) ...[
               const SizedBox(height: 32),
               const Divider(),
               const SizedBox(height: 16),
               const Text('Painel de Administração', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
               const SizedBox(height: 16),
+              
+              // 🟢 NOVO BOTÃO DE GERENCIAR USUÁRIOS (Apenas para Grêmio/Admin)
+              if (isGremio) ...[
+                _buildProfileButton(
+                  context,
+                  label: 'Gerenciar Permissões',
+                  icon: Icons.manage_accounts,
+                  onPressed: () {
+                    Navigator.of(context, rootNavigator: true).push(
+                      MaterialPageRoute(builder: (context) => const AdminUsuariosPage()),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+              
+              // BOTÕES PADRÃO DE ADMINISTRAÇÃO
               _buildProfileButton(
                 context,
-                label: 'Criar Disciplina Oficial', // 🟢 Texto corrigido
+                label: 'Criar Disciplina Oficial',
                 icon: Icons.add_business,
                 isHighlight: true,
                 onPressed: () {
-                  // 🟢 MÁGICA DA NAVEGAÇÃO: rootNavigator=true abre a tela cobrindo as abas!
                   Navigator.of(context, rootNavigator: true).push(
-                    MaterialPageRoute(
-                      builder: (context) => const CriarDisciplinaPage(),
-                    ),
+                    MaterialPageRoute(builder: (context) => const CriarDisciplinaPage()),
                   );
                 },
               ),

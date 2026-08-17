@@ -3,7 +3,7 @@
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/pages/disciplina_details_page.dart';
 import 'package:app_da_poli/providers/disciplinas_provider.dart';
-import 'package:app_da_poli/providers/user_provider.dart'; // 🟢 NOVO IMPORT
+import 'package:app_da_poli/providers/user_provider.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -15,24 +15,20 @@ class AulaCard extends StatelessWidget {
   // =========================================================================
   // 🎛️ PAINEL DE CONTROLE - DESIGN DO CARD DE AULA
   // =========================================================================
-  // Borda e Sombras
-  final double _raioBordaCard = 6.0; // 🟢 Arredondamento do Card
+  final double _raioBordaCard = 6.0; 
 
-  // Espaçamentos Internos e Externos
   final double _distanciaEntreCards = 8.0; 
   final double _paddingLateralInterno = 12.0;
   final double _paddingTopCard = 9.0;
   final double _paddingBottomCard = 12.0;
   final double _espacoHorarioETextos = 9.0; 
   
-  // 🟢 MICRO-ESPAÇAMENTOS VERTICAIS
-  final double _espacoTituloLocal = 3.0;      // Título da Disciplina -> Local
-  final double _espacoLocalAulaNum = 2.0;     // Local -> "Aula 8"
-  final double _espacoAulaNumLinha = 10.0;    // "Aula 8" -> Linha Divisória
-  final double _espacoLinhaTextoAgora = 8.0;  // Linha Divisória -> "AGORA > VOCÊ ESTÁ NA AULA?"
-  final double _espacoTextoAgoraBotoes = 7.0; // Texto "AGORA..." -> Botões de Presença
+  final double _espacoTituloLocal = 3.0;      
+  final double _espacoLocalAulaNum = 2.0;     
+  final double _espacoAulaNumLinha = 10.0;    
+  final double _espacoLinhaTextoAgora = 8.0;  
+  final double _espacoTextoAgoraBotoes = 7.0; 
   
-  // Tipografia (Tamanhos)
   final double _tamanhoHorario = 15.0;
   final double _tamanhoTitulo = 18.0;
   final double _tamanhoLocal = 14.0;
@@ -40,34 +36,17 @@ class AulaCard extends StatelessWidget {
   final double _tamanhoTextoAgora = 15.0;
   final double _tamanhoTextoBotao = 18.0;
   
-  // Opacidades
   final double _opacidadeTextosSecundarios = 0.60; 
-
-  // Linhas
   final double _espessuraLinhaHorario = 1.5;
   final double _espessuraLinhaDivisoria = 2.5;
-
-  // Botões
   final double _espacoEntreBotoes = 10.0;
-
-  // Cores do Card (Estilo PQI)
-  final Color _corBordaCard = const Color(0xFF0085FF);
-  final Gradient _gradienteFundo = const LinearGradient(
-    colors: [Color(0xFF0460E9), Color(0xFF0D41A9)],
-    begin: Alignment.centerLeft,
-    end: Alignment.centerRight,
-  );
   
-  // Cores de Texto e Linhas Internas
   final Color _corTextoBase = const Color(0xFFF0F0F0);
-  
-  // Cores dos Botões
   final Color _corFundoBotao = const Color(0xFFF0F0F0);
   final Color _corBordaBotao = const Color(0xFFB3B3B8);
   final Color _corTextoBotao = const Color(0xFFB3B3B8);
   // =========================================================================
 
-  // 🟢 LENTE INTELIGENTE: Pega a Turma do Aluno e vê a aula de HOJE
   (HorarioAula?, Turma?) _getDadosExibicao(BuildContext context) {
     if (disciplina.turmas.isEmpty) return (null, null);
 
@@ -77,12 +56,8 @@ class AulaCard extends StatelessWidget {
     final hojeStr = mapDias[now.weekday] ?? '';
     final minutosAtual = now.hour * 60 + now.minute;
 
-    // Filtra para pegar apenas as turmas em que o aluno está inscrito.
-    // (Se o banco antigo só tiver a disciplina, usamos todas como fallback)
     List<Turma> turmasDoAluno = disciplina.turmas.where((t) => user?.turmasIds.contains(t.id) ?? false).toList();
-    if (turmasDoAluno.isEmpty) {
-      turmasDoAluno = disciplina.turmas;
-    }
+    if (turmasDoAluno.isEmpty) { turmasDoAluno = disciplina.turmas; }
 
     HorarioAula? horarioHoje;
     Turma? turmaHoje;
@@ -90,7 +65,7 @@ class AulaCard extends StatelessWidget {
     for (var turma in turmasDoAluno) {
       for (var hor in turma.horarios) {
         if (hor.dia == hojeStr) {
-          horarioHoje ??= hor; // Salva o primeiro do dia pra caso não seja agora
+          horarioHoje ??= hor; 
           turmaHoje ??= turma;
           
           try {
@@ -99,7 +74,6 @@ class AulaCard extends StatelessWidget {
             final minutosInicio = int.parse(inicioStr[0]) * 60 + int.parse(inicioStr[1]);
             final minutosFim = int.parse(fimStr[0]) * 60 + int.parse(fimStr[1]);
 
-            // Achou a aula que está acontecendo AGORA (com 15min de tolerância prévia)
             if (minutosAtual >= (minutosInicio - 15) && minutosAtual <= minutosFim) {
               return (hor, turma);
             }
@@ -108,10 +82,8 @@ class AulaCard extends StatelessWidget {
       }
     }
 
-    // Se não for agora, mas tiver aula hoje, mostra a próxima/anterior do dia
     if (horarioHoje != null) return (horarioHoje, turmaHoje);
     
-    // Se não tem aula hoje, mostra o primeiro horário da turma dele só pra preencher o Card
     final primeiraTurma = turmasDoAluno.first;
     final primeiroHorario = primeiraTurma.horarios.isNotEmpty ? primeiraTurma.horarios.first : null;
     return (primeiroHorario, primeiraTurma);
@@ -134,9 +106,7 @@ class AulaCard extends StatelessWidget {
       final minutosFim = int.parse(fimStr[0]) * 60 + int.parse(fimStr[1]);
 
       return minutosAtual >= (minutosInicio - 15) && minutosAtual <= minutosFim;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) { return false; }
   }
 
   @override
@@ -149,15 +119,22 @@ class AulaCard extends StatelessWidget {
 
     final bool jaRespondeuHoje = progresso?.historicoPresenca.containsKey(dataHojeStr) ?? false;
     
-    // 🟢 Busca os dados inteligentes da Turma/Horário
     final dados = _getDadosExibicao(context);
     final horarioAtual = dados.$1;
     final turmaAtual = dados.$2;
 
-    // Só mostra os botões e a linha se for a hora da aula.
     final bool mostrarBotoes = _isAulaAcontecendo(horarioAtual) && !jaRespondeuHoje;
-
     final String avisoEspecial = disciplina.departamento == 'PQI' ? 'NÃO DEIXE DE LEVAR JALECO E ÓCULOS DE PROTEÇÃO' : '';
+
+    // 🟢 MÁGICA DA COR: Pega a cor exata da disciplina e escurece 25% para criar o degradê!
+    final Color corBase = disciplina.cor;
+    final Color corEscurecida = Color.lerp(corBase, Colors.black, 0.25) ?? corBase;
+    
+    final Gradient gradienteDinamico = LinearGradient(
+      colors: [corBase, corEscurecida], 
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+    );
 
     return GestureDetector(
       onTap: () {
@@ -167,14 +144,7 @@ class AulaCard extends StatelessWidget {
         margin: EdgeInsets.only(bottom: _distanciaEntreCards),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(_raioBordaCard),
-          border: Border.all(color: _corBordaCard, width: 1.5), 
-          boxShadow: [
-            BoxShadow(
-              color: disciplina.cor.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          border: Border.all(color: corBase, width: 2.0), // Borda da Engenharia
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -184,7 +154,7 @@ class AulaCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.only(topLeft: Radius.circular(_raioBordaCard), topRight: Radius.circular(_raioBordaCard)),
+                  borderRadius: BorderRadius.only(topLeft: Radius.circular(_raioBordaCard - 2.0), topRight: Radius.circular(_raioBordaCard - 2.0)),
                 ),
                 child: Text(
                   avisoEspecial,
@@ -200,10 +170,11 @@ class AulaCard extends StatelessWidget {
                 bottom: _paddingBottomCard,
               ),
               decoration: BoxDecoration(
-                gradient: _gradienteFundo,
+                // 🟢 AGORA SIM O FUNDO É OBRIGATÓRIAMENTE DINÂMICO!
+                gradient: gradienteDinamico, 
                 borderRadius: avisoEspecial.isNotEmpty 
-                  ? BorderRadius.only(bottomLeft: Radius.circular(_raioBordaCard), bottomRight: Radius.circular(_raioBordaCard)) 
-                  : BorderRadius.circular(_raioBordaCard - 1.5),
+                  ? BorderRadius.only(bottomLeft: Radius.circular(_raioBordaCard - 2.0), bottomRight: Radius.circular(_raioBordaCard - 2.0)) 
+                  : BorderRadius.circular(_raioBordaCard - 2.0),
               ),
               child: Column(
                 children: [
@@ -218,7 +189,6 @@ class AulaCard extends StatelessWidget {
                     ),
                   ),
                   
-                  // ANIMAÇÃO DE GAVETA: O Card cresce suavemente para revelar os botões
                   AnimatedSize(
                     duration: const Duration(milliseconds: 350),
                     curve: Curves.easeOutCubic,

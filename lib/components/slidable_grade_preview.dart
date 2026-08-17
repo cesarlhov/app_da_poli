@@ -122,13 +122,27 @@ class SlidableGradePreviewState extends State<SlidableGradePreview> with SingleT
   Widget _buildRevealOptions() {
     return Container(
       width: _revealWidth + 20,
-      decoration: BoxDecoration(color: const Color(0xFF5E6982), borderRadius: BorderRadius.circular(8.0)),
+      decoration: BoxDecoration(
+        // 🟢 Efeito Metálico (Degradê Vertical)
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF5E6982),
+            Color(0xFFA1AFD0),
+            Color(0xFF5E6982),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
       child: Padding(
         padding: const EdgeInsets.only(left: 10.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
+            // Como a paleta agora é mais clara no meio, você pode querer adicionar uma sombra no ícone depois se precisar de mais contraste
             IconButton(icon: SvgPicture.asset('assets/images/editar_icon.svg', colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn), width: 28), onPressed: _navigateToEditPage),
+            // Aqui substituí o ícone de baixar pela engrenagem de cores e opções conforme a sua print de referência, mas mantive o SVG antigo caso você queira.
             IconButton(icon: SvgPicture.asset('assets/images/baixar_icon.svg', colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn), width: 28), onPressed: () {}),
           ],
         ),
@@ -153,6 +167,29 @@ class _MiniGradePreview extends StatelessWidget {
     this.espacoArrasteAteBase = 15.0,
     this.espacoBaseSemFooter = 16.0
   });
+
+  // 🟢 MÁGICA DOS CRÉDITOS: 1 Crédito = 50 minutos semanais
+  int _calcularCreditos(BuildContext context) {
+    final user = context.read<UserProvider>().currentUser;
+    final turmasIds = user?.turmasIds ?? [];
+    int totalMinutos = 0;
+
+    for (var d in disciplinas) {
+      var turmasValidas = d.turmas.where((t) => turmasIds.contains(t.id)).toList();
+      if (turmasValidas.isEmpty) turmasValidas = d.turmas;
+
+      for (var t in turmasValidas) {
+        for (var hor in t.horarios) {
+          int start = _timeToMin(hor.inicio);
+          int end = _timeToMin(hor.fim);
+          if (start > 0 && end > start) {
+            totalMinutos += (end - start);
+          }
+        }
+      }
+    }
+    return totalMinutos ~/ 50; 
+  }
 
   double get _escalaAlturaGrade => (1.0 - scrollProgress * 0.5).clamp(0.5, 1.0); 
 
@@ -234,7 +271,7 @@ class _MiniGradePreview extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min, 
               children: [
-                _buildHeader(),
+                _buildHeader(context),
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: _paddingLateralGrade),
                   child: LayoutBuilder(
@@ -264,14 +301,16 @@ class _MiniGradePreview extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader() {
+  // 🟢 ATUALIZADO: Agora recebe context e mostra o valor real!
+  Widget _buildHeader(BuildContext context) {
+    int creditos = _calcularCreditos(context);
     return Padding(
       padding: EdgeInsets.only(top: espacoTopoAteTitulo, bottom: espacoTituloAteGrade, left: _paddingLateralGrade, right: _paddingLateralGrade),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text('GRADE HORÁRIA', style: TextStyle(fontFamily: 'Aristotelica', fontSize: tamanhoTitulo, fontWeight: FontWeight.w700, color: _corTitulo)),
-          Text('24 Č', style: TextStyle(fontFamily: 'Aristotelica', fontSize: tamanhoCreditos, fontWeight: FontWeight.w700, color: _corTitulo)),
+          Text('$creditos Č', style: TextStyle(fontFamily: 'Aristotelica', fontSize: tamanhoCreditos, fontWeight: FontWeight.w700, color: _corTitulo)),
         ],
       ),
     );
@@ -302,7 +341,6 @@ class _MiniGradePreview extends StatelessWidget {
           if (end > maxMins) maxMins = end;
 
           if (start < 790 && end > 660) {
-            // 🟢 Correção do bug: .toUpperCase() para achar os dias perfeitamente
             int index = ['SEGUNDA','TERÇA','QUARTA','QUINTA','SEXTA'].indexOf(hor.dia.toUpperCase());
             if (index != -1) dayHasLunch[index] = true;
           }
@@ -310,22 +348,29 @@ class _MiniGradePreview extends StatelessWidget {
       }
     }
 
-    double extraTop = (450 - minMins) > 0 ? (450 - minMins) * pixelsPorMinuto : 0.0;
-    double extraBottom = (maxMins > 1000) ? (maxMins - 1000) * pixelsPorMinuto : 0.0;
+    bool hasLunchAny = dayHasLunch.contains(true);
+    int minTimeManha = min(450, minMins);
+    int maxTimeTarde = max(1000, maxMins);
+
+    // 🟢 MÁGICA 1: As caixas da manhã e tarde crescem sozinhas se a aula for muito cedo ou muito tarde!
+    double alturaManha = (660 - minTimeManha) * pixelsPorMinuto;
+    double alturaTarde = (maxTimeTarde - 790) * pixelsPorMinuto;
     
-    double alturaManha = 210 * pixelsPorMinuto;
-    double alturaTarde = 210 * pixelsPorMinuto;
-    double alturaAlmoco = espacoAcimaLinha + _linhaAlmocoEspessura + espacoAbaixoLinha; 
-    
-    double totalGridHeight = extraTop + alturaManha + alturaAlmoco + alturaTarde + extraBottom;
+    // 🟢 MÁGICA 2: O espaço do almoço deixa de ser um "vão visual" e passa a ser mapeado em minutos 
+    // se existir qualquer disciplina nesse horário, acompanhando a proporção do resto da grade.
+    double alturaAlmoco = hasLunchAny 
+        ? (130 * pixelsPorMinuto) 
+        : (espacoAcimaLinha + _linhaAlmocoEspessura + espacoAbaixoLinha);
+
+    double totalGridHeight = alturaManha + alturaAlmoco + alturaTarde;
 
     double timeToY(int t) {
       if (t <= 660) {
-        return extraTop + (t - 450) * pixelsPorMinuto;
+        return (t - minTimeManha) * pixelsPorMinuto;
       } else if (t >= 790) {
-        return extraTop + alturaManha + alturaAlmoco + (t - 790) * pixelsPorMinuto;
+        return alturaManha + alturaAlmoco + (t - 790) * pixelsPorMinuto;
       } else {
-        return extraTop + alturaManha + ((t - 660) / 130.0) * alturaAlmoco;
+        return alturaManha + ((t - 660) / 130.0) * alturaAlmoco;
       }
     }
 
@@ -402,6 +447,12 @@ class _MiniGradePreview extends StatelessWidget {
     // 3. Fase do Almoço: Desenha a linha sólida
     List<Widget> lineSegments = [];
     int startIdx = -1;
+
+    // 🟢 MÁGICA 3: Mantém a linha perfeitamente centralizada quer o vão seja pequeno ou o bloco do almoço tenha expandido!
+    double linhaY = hasLunchAny 
+        ? alturaManha + (alturaAlmoco / 2) - (_linhaAlmocoEspessura / 2)
+        : alturaManha + espacoAcimaLinha;
+
     for (int i = 0; i <= 5; i++) {
       if (i < 5 && !dayHasLunch[i]) {
         if (startIdx == -1) startIdx = i; 
@@ -415,7 +466,7 @@ class _MiniGradePreview extends StatelessWidget {
             Positioned(
               left: leftPos,
               width: lineWidth,
-              top: extraTop + alturaManha + espacoAcimaLinha, 
+              top: linhaY, 
               height: _linhaAlmocoEspessura,
               child: Container(
                 decoration: BoxDecoration(
@@ -445,11 +496,9 @@ class _MiniGradePreview extends StatelessWidget {
                     width: colWidth,
                     child: Column(
                       children: [
-                        if (extraTop > 0) SizedBox(height: extraTop),
                         dayHasLunch[i] ? buildDottedBox(alturaManha + alturaAlmoco + alturaTarde) : buildDottedBox(alturaManha),
                         if (!dayHasLunch[i]) SizedBox(height: alturaAlmoco),
                         if (!dayHasLunch[i]) buildDottedBox(alturaTarde),
-                        if (extraBottom > 0) SizedBox(height: extraBottom),
                       ],
                     )
                   );

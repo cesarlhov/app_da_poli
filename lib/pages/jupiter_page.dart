@@ -105,6 +105,8 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
     super.dispose();
   }
 
+  List<int> _diasExibidos = [0]; // 🟢 Estado: Controla quais dias estamos vendo (0 = hoje, 1 = amanhã, etc)
+
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour >= 0 && hour < 5) return 'BOA MADRUGADA';
@@ -113,39 +115,39 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
     return 'BOA NOITE';
   }
 
-  // 🟢 LENTE INTELIGENTE: Puxa as aulas baseadas nas Turmas matriculadas
-  List<Disciplina> _getAulasDeHoje(List<Disciplina> todasAsDisciplinas, UserModel user) {
+  // 🟢 Lógica avançada para buscar aulas de QUALQUER dia no futuro
+  List<Disciplina> _getAulasDoDia(List<Disciplina> todasAsDisciplinas, UserModel user, int offsetDias) {
     if (todasAsDisciplinas.isEmpty) return [];
 
-    final now = DateTime.now();
+    final dataAlvo = DateTime.now().add(Duration(days: offsetDias));
     const mapDias = {1: 'SEGUNDA', 2: 'TERÇA', 3: 'QUARTA', 4: 'QUINTA', 5: 'SEXTA', 6: 'SÁBADO', 7: 'DOMINGO'};
-    final hojeStr = mapDias[now.weekday] ?? '';
-    if (hojeStr.isEmpty) return [];
+    final diaStr = mapDias[dataAlvo.weekday] ?? '';
+    if (diaStr.isEmpty) return [];
 
-    List<Disciplina> aulasHoje = [];
+    List<Disciplina> aulasDia = [];
 
     for (var d in todasAsDisciplinas) {
       var turmasDoAluno = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
       if (turmasDoAluno.isEmpty) turmasDoAluno = d.turmas; 
       
-      bool temAulaHoje = false;
+      bool temAula = false;
       for (var t in turmasDoAluno) {
-        if (t.horarios.any((h) => h.dia == hojeStr)) {
-          temAulaHoje = true;
+        if (t.horarios.any((h) => h.dia == diaStr)) {
+          temAula = true;
           break;
         }
       }
-      if (temAulaHoje) aulasHoje.add(d);
+      if (temAula) aulasDia.add(d);
     }
 
-    aulasHoje.sort((a, b) {
+    aulasDia.sort((a, b) {
       int getEarliest(Disciplina d) {
         int minTime = 1440; 
         var turmas = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
         if (turmas.isEmpty) turmas = d.turmas;
         for (var t in turmas) {
           for (var h in t.horarios) {
-            if (h.dia == hojeStr) {
+            if (h.dia == diaStr) {
               try {
                 final parts = h.inicio.split(':');
                 final time = int.parse(parts[0]) * 60 + int.parse(parts[1]);
@@ -159,7 +161,26 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
       return getEarliest(a).compareTo(getEarliest(b));
     });
 
-    return aulasHoje;
+    return aulasDia;
+  }
+
+  // 🟢 Varre a semana em busca do próximo dia com aula
+  void _carregarProximoDiaComAula(List<Disciplina> disciplinas, UserModel user) {
+    int nextDay = _diasExibidos.last + 1;
+    while (nextDay < 14) { // Limite de 14 dias pra frente
+      if (_getAulasDoDia(disciplinas, user, nextDay).isNotEmpty) {
+        setState(() {
+          if (_diasExibidos.length == 1 && _getAulasDoDia(disciplinas, user, _diasExibidos.first).isEmpty) {
+            _diasExibidos = [nextDay]; // Substitui o "vazio" pelo próximo dia
+          } else {
+            _diasExibidos.add(nextDay); // Adiciona ao fim da lista (Carregar Mais)
+          }
+        });
+        return;
+      }
+      nextDay++;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nenhuma aula agendada para os próximos 14 dias.')));
   }
 
   String _formatUserName(String fullName) {
@@ -183,9 +204,6 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
 
     final disciplinas = disciplinasProvider.disciplinas;
     
-    // 🟢 Agora passa o usuário para saber as turmas certas
-    final aulasDeHoje = _getAulasDeHoje(disciplinas, user);
-    
     String currentGreeting = _getGreeting(); 
     bool animateThisTime = false;
     if (_lastSeenGreeting != currentGreeting) {
@@ -193,6 +211,7 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
       _lastSeenGreeting = currentGreeting;
     }
 
+    // 🟢 Volta a calcular sempre o dia de HOJE para a barra fixa no topo
     final now = DateTime.now();
     const mapDiasTitulo = {1: 'SEGUNDA-FEIRA', 2: 'TERÇA-FEIRA', 3: 'QUARTA-FEIRA', 4: 'QUINTA-FEIRA', 5: 'SEXTA-FEIRA', 6: 'SÁBADO', 7: 'DOMINGO'};
     final diaSemanaStr = mapDiasTitulo[now.weekday] ?? '';
@@ -205,49 +224,30 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
           controller: _scrollController,
           slivers: [
             SliverToBoxAdapter(child: _buildIdentidadeHeader(user, animateThisTime, currentGreeting)),
-            
             SliverPersistentHeader(
               pinned: true, 
               delegate: _GradeMinimalistaDelegate(
-                disciplinas: disciplinas,
-                slidableGradeKey: _slidableGradeKey,
-                onGradeEdited: () {},
-                paddingLateral: _paddingLateralTela, 
-                shrinkAnimationValue: _shrinkController.value, 
-                distanciaTeto: _distanciaTetoQuandoFixado, 
-                espacoGradeAteArraste: _espacoGradeAteArraste, 
-                espacoArrasteAteBase: _espacoArrasteAteBase, 
-                espacoBaseSemFooter: _espacoBaseSemFooter, 
-                onShrink: () {
-                  if (mounted) {
-                    _shrinkController.forward(); 
-                    _isGradeShrunk = true;
-                  }
-                },
+                disciplinas: disciplinas, slidableGradeKey: _slidableGradeKey, onGradeEdited: () {},
+                paddingLateral: _paddingLateralTela, shrinkAnimationValue: _shrinkController.value, 
+                distanciaTeto: _distanciaTetoQuandoFixado, espacoGradeAteArraste: _espacoGradeAteArraste, 
+                espacoArrasteAteBase: _espacoArrasteAteBase, espacoBaseSemFooter: _espacoBaseSemFooter, 
+                onShrink: () { if (mounted) { _shrinkController.forward(); _isGradeShrunk = true; } },
               ),
             ),
-            
             SliverPersistentHeader(
               pinned: true,
               delegate: _StickyHojeDelegate(
-                paddingLateral: _paddingLateralTela,
-                distanciaMinigradeProHoje: _distanciaMinigradeProHoje,
-                tamanhoHoje: _tamanhoHoje,
-                corHoje: _corHoje,
-                tamanhoDiaSemana: _tamanhoDiaSemana,
-                corDiaSemana: _corDiaSemanaEClasse,
-                distanciaHojeProDia: _distanciaHojeProDia,
-                tamanhoAcessarClasse: _tamanhoAcessarClasse,
-                distanciaHojeProsCards: _distanciaHojeProsCards,
-                diaSemana: diaSemanaStr, 
+                paddingLateral: _paddingLateralTela, distanciaMinigradeProHoje: _distanciaMinigradeProHoje,
+                tamanhoHoje: _tamanhoHoje, corHoje: _corHoje, tamanhoDiaSemana: _tamanhoDiaSemana,
+                corDiaSemana: _corDiaSemanaEClasse, distanciaHojeProDia: _distanciaHojeProDia,
+                tamanhoAcessarClasse: _tamanhoAcessarClasse, distanciaHojeProsCards: _distanciaHojeProsCards,
                 
+                diaSemana: diaSemanaStr, // 🟢 Apenas passa o dia atual novamente
                 scrollController: _scrollController, 
-                extensaoLinhaCards: _extensaoLinhaCards,
-                espessuraLinhaCards: _espessuraLinhaCards,
+                extensaoLinhaCards: _extensaoLinhaCards, espessuraLinhaCards: _espessuraLinhaCards,
               ),
             ),
-            
-            SliverToBoxAdapter(child: _buildCronogramaDoDia(aulasDeHoje)),
+            SliverToBoxAdapter(child: _buildFeedInteligente(disciplinas, user)),
           ],
         ),
       ),
@@ -297,44 +297,81 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
     );
   }
 
-  Widget _buildCronogramaDoDia(List<Disciplina> aulasDeHoje) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(_paddingLateralTela, 0.0, _paddingLateralTela, 160.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (aulasDeHoje.isEmpty)
-            const Padding(padding: EdgeInsets.symmetric(vertical: 40.0), child: Center(child: Text('Nenhuma aula hoje. Aproveite!', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey,))))
-          else ...[
-            for (int i = 0; i < aulasDeHoje.length; i++) ...[
-              AulaCard(disciplina: aulasDeHoje[i]),
-              if (i < aulasDeHoje.length - 1)
-                Container(
-                  margin: EdgeInsets.only(
-                    top: _intervaloMarginTop, 
-                    bottom: _intervaloMarginBottom,
-                    left: _intervaloMarginLateral,
-                    right: _intervaloMarginLateral
-                  ),
-                  height: _intervaloAltura,
-                  child: DottedContainer(
-                    borderColor: _intervaloCorBorda,
-                    strokeWidth: _intervaloEspessuraBorda,
-                    borderRadius: BorderRadius.circular(_intervaloRaioBorda),
-                    color: _intervaloCorFundo,
-                    dashPattern: [_intervaloTraco, _intervaloEspaco],
+  // 🟢 O NOVO FEED INTELIGENTE (Design Atualizado e Proporcional)
+  Widget _buildFeedInteligente(List<Disciplina> disciplinas, UserModel user) {
+    return GestureDetector(
+      onTap: () => _slidableGradeKey.currentState?.closeMenu(),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(_paddingLateralTela, 16, _paddingLateralTela, 160.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ..._diasExibidos.expand((offset) {
+              final aulas = _getAulasDoDia(disciplinas, user, offset);
+              final dataAlvo = DateTime.now().add(Duration(days: offset));
+              const mapDias = {1: 'SEGUNDA', 2: 'TERÇA', 3: 'QUARTA', 4: 'QUINTA', 5: 'SEXTA', 6: 'SÁBADO', 7: 'DOMINGO'};
+              final diaStr = mapDias[dataAlvo.weekday] ?? '';
+              
+              final isHoje = offset == 0;
+              final isAmanha = offset == 1;
+              String tituloBloco = isHoje ? 'HOJE' : (isAmanha ? 'AMANHÃ' : diaStr);
+
+              final estiloTituloFeed = const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w900, fontFamily: 'LeagueSpartan', color: Color(0xFF162038));
+
+              // 🟢 ESTADO VAZIO: Sábado/Domingo sem aula e sem avançar ainda
+              if (aulas.isEmpty && isHoje && _diasExibidos.length == 1) {
+                return [
+                  // 🟢 ERRO CONSERTADO: A linha que imprimia o título "HOJE" foi apagada daqui!
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40.0),
                     child: Center(
-                      child: Text(
-                        'INTERVALO – APROVEITE PARA ESTUDAR', 
-                        style: TextStyle(fontFamily: 'Aristotelica', fontSize: _intervaloTamanhoTexto, fontWeight: FontWeight.w700, color: _intervaloCorTexto),
-                      ),
-                    ),
+                      child: Column(
+                        children: [
+                          const Text('Nenhuma aula hoje. Aproveite!', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey)),
+                          const SizedBox(height: 20),
+                          // 🟢 BOTÃO MINIMALISTA
+                          GestureDetector(
+                            onTap: () => _carregarProximoDiaComAula(disciplinas, user),
+                            child: const Text('CARREGAR PRÓXIMAS >', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16.0, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF))),
+                          )
+                        ]
+                      )
+                    )
+                  )
+                ];
+              }
+
+              // 🟢 FEED NORMAL DO DIA
+              bool isHojeGrupo = tituloBloco.toUpperCase().contains('HOJE');
+
+              return [
+                // SÓ MOSTRA O TÍTULO SE NÃO FOR O GRUPO DE HOJE!
+                if (!isHojeGrupo) ...[
+                   Text(tituloBloco, style: estiloTituloFeed),
+                   const SizedBox(height: 10),
+                ],
+                
+                // Mostra os cards das aulas normalmente
+                ...aulas.map((aula) => AulaCard(disciplina: aula)),
+                
+                const SizedBox(height: 24), // Espaço no final do grupo
+              ];
+            }),
+
+            // 🟢 BOTÃO DE CARREGAR MAIS AO FINAL DA LISTA (MINIMALISTA)
+            if (_diasExibidos.isNotEmpty && !(_diasExibidos.length == 1 && _getAulasDoDia(disciplinas, user, _diasExibidos.first).isEmpty))
+              Center(
+                child: GestureDetector(
+                  onTap: () => _carregarProximoDiaComAula(disciplinas, user),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16.0),
+                    child: Text('CARREGAR MAIS >', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16.0, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF))),
                   ),
                 ),
-            ]
+              )
           ]
-        ],
-      ),
+        )
+      )
     );
   }
 }
@@ -454,7 +491,7 @@ class _StickyHojeDelegate extends SliverPersistentHeaderDelegate {
   final double distanciaHojeProDia;
   final double tamanhoAcessarClasse;
   final double distanciaHojeProsCards;
-  final String diaSemana;
+  final String diaSemana; // Somente o diaSemana foi mantido!
 
   final ScrollController scrollController;
   final double extensaoLinhaCards;
@@ -497,6 +534,7 @@ class _StickyHojeDelegate extends SliverPersistentHeaderDelegate {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
+                      // 🟢 VOLTOU PARA 'HOJE' FIXO COM A COR FORTE!
                       Text('HOJE', style: TextStyle(fontFamily: 'LeagueSpartan', fontSize: tamanhoHoje, fontWeight: FontWeight.w900, color: corHoje, height: 1.0)),
                       SizedBox(width: distanciaHojeProDia),
                       Text('/ $diaSemana', style: TextStyle(fontFamily: 'Aristotelica', fontSize: tamanhoDiaSemana, fontWeight: FontWeight.w700, color: corDiaSemana, height: 1.0)),

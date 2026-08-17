@@ -10,7 +10,10 @@ class UserModel {
   final String numeroUSP; 
   final String? telefone; 
   final String curso;
-  final String? fotoUrl; // ✅ NOVO CAMPO: Link da foto de perfil
+  final String? fotoUrl; 
+  
+  // 🟢 NOVO: Campo explícito de cargo para o Painel de Administração
+  final UserRole role; 
   
   // Hierarquia e Poderes
   final bool isGremio; 
@@ -38,7 +41,8 @@ class UserModel {
     required this.numeroUSP,
     this.telefone,
     required this.curso,
-    this.fotoUrl, // ✅ INCLUÍDO AQUI
+    this.fotoUrl, 
+    this.role = UserRole.aluno, // 🟢 Inicializado aqui
     this.isGremio = false,
     this.isRC = false,
     this.turmasGerenciadas = const [],
@@ -51,6 +55,14 @@ class UserModel {
     this.visibilidadePerfil = 'publico',
   });
 
+  // 🟢 Função auxiliar para converter o texto do Firebase em Enum
+  static UserRole _parseRole(String? roleStr) {
+    if (roleStr == 'admin') return UserRole.admin;
+    if (roleStr == 'gremio') return UserRole.gremio;
+    if (roleStr == 'representante') return UserRole.representante;
+    return UserRole.aluno;
+  }
+
   factory UserModel.fromMap(Map<String, dynamic> map, String documentId) {
     return UserModel(
       uid: documentId,
@@ -60,7 +72,8 @@ class UserModel {
       numeroUSP: map['numeroUSP'] ?? map['nusp'] ?? '',
       telefone: map['telefone'],
       curso: map['curso'] ?? 'Não informado',
-      fotoUrl: map['fotoUrl'], // ✅ PUXA DO BANCO
+      fotoUrl: map['fotoUrl'], 
+      role: _parseRole(map['role']), // 🟢 Mapeado aqui
       isGremio: map['isGremio'] ?? (map['role'] == 'gremio' || map['role'] == 'admin'),
       isRC: map['isRC'] ?? (map['role'] == 'representante'),
       turmasGerenciadas: List<String>.from(map['turmasGerenciadas'] ?? []),
@@ -82,7 +95,8 @@ class UserModel {
       'numeroUSP': numeroUSP,
       'telefone': telefone,
       'curso': curso,
-      'fotoUrl': fotoUrl, // ✅ SALVA NO BANCO
+      'fotoUrl': fotoUrl, 
+      'role': role.name, // 🟢 Salva o cargo corretamente
       'isGremio': isGremio,
       'isRC': isRC,
       'turmasGerenciadas': turmasGerenciadas,

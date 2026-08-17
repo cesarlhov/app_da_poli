@@ -252,4 +252,52 @@ class FirestoreService {
       });
     }
   }
+  // =========================================================================
+  // --- MÉTODOS DE ADMINISTRAÇÃO E APROVAÇÃO ---
+  // =========================================================================
+
+  /// Puxa todos os usuários do aplicativo para o painel de admin
+  Stream<List<UserModel>> getTodosUsuarios() {
+    return _db.collection('users').snapshots().map(
+      (snapshot) => snapshot.docs
+          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+          .toList(),
+    );
+  }
+
+  /// Altera o cargo de qualquer usuário (Admin e Grêmio usam isso)
+  Future<void> atualizarCargoUsuario(String uid, String novoCargo) async {
+    await _db.collection('users').doc(uid).update({'role': novoCargo});
+  }
+
+  /// O Grêmio clica nisso para validar uma disciplina sugerida por um RC
+  Future<void> aprovarDisciplina(String disciplinaId) async {
+    await _db.collection('disciplinas').doc(disciplinaId).update({'isVerificada': true});
+  }
+
+  // 🟢 NOVO: Função para o aluno se desmatricular de uma disciplina
+  Future<void> desmatricularDeDisciplina(String disciplinaId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    
+    final batch = _db.batch();
+
+    // 1. Remove a ID da lista de turmas
+    final userRef = _db.collection('users').doc(user.uid);
+    batch.update(userRef, {
+      'turmasIds': FieldValue.arrayRemove([disciplinaId])
+    });
+
+    // 2. Decrementa o número global de inscritos
+    final disciplinaRef = _db.collection('disciplinas').doc(disciplinaId);
+    batch.update(disciplinaRef, {
+      'numeroInscritos': FieldValue.increment(-1)
+    });
+
+    // 3. Deleta o espelho de Progresso (Diário de bordo) do aluno
+    final progressoRef = userRef.collection('progresso_disciplinas').doc(disciplinaId);
+    batch.delete(progressoRef);
+
+    await batch.commit(); // Executa tudo
+  }
 }

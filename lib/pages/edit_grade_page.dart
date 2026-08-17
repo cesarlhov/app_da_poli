@@ -7,6 +7,8 @@ import 'package:app_da_poli/components/dotted_container.dart';
 import 'package:flutter/gestures.dart'; 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:app_da_poli/services/firestore_service.dart';
 
 class EditGradePage extends StatefulWidget {
   final List<Disciplina> initialDisciplinas;
@@ -23,36 +25,102 @@ class EditGradePage extends StatefulWidget {
 }
 
 class _EditGradePageState extends State<EditGradePage> with SingleTickerProviderStateMixin {
+
+// 🟢 CÁLCULO DE CRÉDITOS AO VIVO NA TELA DE EDIÇÃO
+  int _calcularCreditosDaEdicao() {
+    int totalMinutos = 0;
+    
+    // Soma as disciplinas atuais com a que está sendo pré-visualizada agora
+    List<Disciplina> todasAtuais = List.from(_disciplinas);
+    if (_disciplinaPreview != null) todasAtuais.add(_disciplinaPreview!);
+
+    for (var d in todasAtuais) {
+      Turma? tValida;
+      if (_disciplinaPreview != null && d.id == _disciplinaPreview!.id) {
+         tValida = _turmaPreview;
+      } else if (d.turmas.isNotEmpty) {
+         tValida = d.turmas.first;
+      }
+      if (tValida != null) {
+        for (var hor in tValida.horarios) {
+          int start = _timeToMin(hor.inicio);
+          int end = _timeToMin(hor.fim);
+          if (start > 0 && end > start) totalMinutos += (end - start);
+        }
+      }
+    }
+    return totalMinutos ~/ 50;
+  }
+
+  // 🟢 CABEÇALHO ATUALIZADO 
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14.6, 10, 14.6, 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('GRADE HORÁRIA', style: TextStyle(fontFamily: 'LeagueSpartan', fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF0460E9))),
+          // Puxa o cálculo em tempo real!
+          Text('${_calcularCreditosDaEdicao()} Č', style: const TextStyle(fontFamily: 'LeagueSpartan', fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF0460E9))),
+        ],
+      ),
+    );
+  }
+
   late List<Disciplina> _disciplinas;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
   Disciplina? _disciplinaPreview;
   Turma? _turmaPreview;
-  bool _teveAlteracao = false;
+  // 🟢 NOVAS VARIÁVEIS DE ESTADO PARA OS BOTÕES
+  bool _gradeModificada = false; // Controla se o botão vira "SALVAR" e fecha a tela
+  bool _teveInteracao = false;   // Controla se o botão de "RESETAR" aparece
 
   // =========================================================================
-  // 🎛️ PAINEL DE CONTROLE - O MOTOR MATEMÁTICO DA GRADE
+  // 🎛️ PAINEL DE CONTROLE - BLOCOS DA GRADE DE EDIÇÃO E LINHAS
+  // =========================================================================
+  final double _larguraDosBlocosGrade = 54.0; // 🟢 LARGURA EXATA DOS RETÂNGULOS
+  
+  // Controle de onde a linha cinza horizontal começa e termina
+  final double _recuoLinhaEsquerda = 3.0; // 🟢 Empurra o começo da linha pra direita
+  final double _recuoLinhaDireita = 3.0;  // 🟢 Puxa o final da linha pra esquerda
+
+  // Tipografia e alinhamento interno (Letras sobre Números)
+  final double _tamanhoSiglaBloco = 15.0; 
+  final FontWeight _pesoSiglaBloco = FontWeight.w700; 
+  
+  final double _tamanhoNumeroBloco = 15.0; 
+  final FontWeight _pesoNumeroBloco = FontWeight.w700; 
+  
+  final double _espacoLetrasNumeros = 2.0; // 🟢 Distância vertical entre "PQI" e "3305"
+  // =========================================================================
+
+  // =========================================================================
+  // 🎛️ PAINEL DE CONTROLE - ESPAÇAMENTO GERAL DA TELA E GRADE
   // =========================================================================
   final double _distanciaTetoTela = 16.0; 
   final double _margemLateralExterna = 14.6; 
   final double _larguraMaximaParaTablets = 500.0; 
-
-  // 🟢 A DISTÂNCIA INTOCÁVEL: As linhas das horas sempre terão esse tamanho
-  final double _tamanhoLinhaHora = 38.0; 
   
-  // 🟢 RESPIROS INTERNOS DA GRADE
-  final double _espacoTopoAntesDo7 = 10.0; 
-  final double _margemExtraFimGrade = 20.0; 
+  // 🟢 A MOLA DO TECLADO E DA PESQUISA
+  final double _ajusteSubidaTeclado = 210.0; 
+  final double _maxAlturaListaPesquisa = 180.0; // Altura máxima que a caixa de busca pode crescer
 
-  // 🟢 A MOLA DA BUSCA: O quanto o painel de ferramentas sobe quando o teclado abre
-  final double _ajusteSubidaTeclado = 200.0; 
+  // =========================================================================
+  // 🎛️ PAINEL DE CONTROLE - A FÍSICA DA GRADE
+  // =========================================================================
+  // 🟢 CONTROLE DO FADE: 0.08 significa 8% do topo esmaecido. Coloque 0.0 para desligar.
+  final double _tamanhoFadeTopGrade = 0.04; 
+
+  // 🟢 ALTURA DAS LINHAS DA HORA
+  // A grade vai tentar usar TODO o espaço livre da tela para mostrar até as 22h.
+  // Mas ela nunca vai deixar a linha maior que 55, nem menor que 28 (se ficar menor, ela liga o scroll interno)
+  final double _alturaMaximaLinha = 55.0; 
+  final double _alturaMinimaLinha = 36.0; 
   
-  // 🟢 LIMITES DA SANFONA
-  // O mínimo que a grade aceita ser esmagada quando o teclado sobe (para não sumir)
-  final double _minAlturaDaGrade = 120.0; 
-  // Limite da lista de pesquisa para ela não tentar devorar a tela toda
-  final double _maxAlturaListaPesquisa = 130.0; 
+  final double _espacoTopoAntesDo7 = 5.0; 
+  final double _margemExtraFimGrade = 10.0; 
 
   // =========================================================================
   // 🎛️ PAINEL DE CONTROLE - DESIGN DA GRADE E SETA VERMELHA
@@ -76,15 +144,15 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
   final double _distanciaHoraLinha = 4.0;
   final double _ajusteVerticalLinhaHora = 8.5; 
   final double _espessuraLinhaHorizontal = 2.0; 
-  final double _raioBordaLinha = 2.0; 
+  final double _raioBordaLinha = 2.0;   
   final Color _corLinhaHorizontal = const Color(0xFFBFC5D1); 
 
-  final double _distanciaSetaNumeros = 0.0; 
+  final double _distanciaSetaNumeros = -2.0; 
   final double _tamanhoSetaVermelha = 12.0; 
-  final double _avancoLinhaVermelha = 3.0; 
+  final double _avancoLinhaVermelha = 4.0; 
 
   // =========================================================================
-  // 🎛️ PAINEL DE CONTROLE - BOTÕES E BARRA INFERIOR
+  // 🎛️ PAINEL DE CONTROLE - BOTÕES DE INTERAÇÃO E BARRA INFERIOR
   // =========================================================================
   final Color _corFundoInput = const Color(0xFFF0F0F0); 
   final Color _corBordaInativa = const Color(0xFF848B97); 
@@ -100,12 +168,13 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
   final double _larguraCaixaUpload = 54.0; 
   final double _tamanhoIconeUpload = 26.0; 
 
-  final double _alturaBarraInferior = 85.0; 
+  final double _alturaBarraInferior = 104.0; 
   final double _espessuraLinhaBarra = 3.0;  
   final Color _corLinhaBarra = const Color(0xFFBFC5D1); 
   
   final double _margemEsquerdaBarraInferior = 20.0;
   final double _margemDireitaBarraInferior = 20.0;
+
   final double _tamanhoTextoAjuda = 16.0;
   final double _tamanhoEstrelaAjuda = 30.0; 
   final Color _corEstrelaAjuda = const Color(0xFF0851CB); 
@@ -144,50 +213,31 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
     'IQ': ['QBQ', 'QFL'],
   };
 
-  late List<Disciplina> _mockDisciplinasList;
-
-  Color _getColorForDepto(String dept) {
-    switch (dept.toUpperCase()) {
-      case 'PQI': case 'PEA': case 'PTC': case 'PSI': case 'PCS': return const Color(0xFF1F4AB7); 
-      case 'PME': case 'PMR': case 'PMT': case 'PMI': return const Color(0xFF722F37); 
-      case 'PNV': return const Color(0xFF1A1A1D); 
-      case 'PHA': return const Color(0xFF6A0DAD); 
-      case 'PCC': case 'PEF': case 'PTR': return const Color(0xFFE1AD01); 
-      case 'PRO': return const Color(0xFF3E8E41); 
-      case 'MAC': case 'MAT': case 'MAE': return const Color(0xFF008080); 
-      case 'FAP': case 'FGE': return const Color(0xFF2E8B57); 
-      case 'QBQ': case 'QFL': return const Color(0xFFD2691E); 
-      default: return const Color(0xFF848B97); 
-    }
-  }
+  List<Disciplina> _todasDisciplinasGlobais = [];
 
   @override
   void initState() {
     super.initState();
     _disciplinas = List.from(widget.initialDisciplinas);
     
-    _mockDisciplinasList = [
-      Disciplina(id: '1', codigo: 'PQI3305', nome: 'FENÔMENOS DE TRANSPORTE', instituto: 'POLI', departamento: 'PQI', ementa: '', isQuadrimestral: false, isEstagio: false, contaPresenca: true, avaliacoesAtivas: [], formulaFinal: '', avisosGerais: '', cor: _getColorForDepto('PQI'), turmas: [
-        Turma(id: 't1', codigo: 'T10', professores: [], horarios: [HorarioAula(dia: 'TERÇA', inicio: '07:30', fim: '11:00', local: '', isLaboratorio: false, frequenciaLab: 0, datasCustomizadas: [], precisaEpi: false, epis: [])]),
-      ]),
-      Disciplina(id: '2', codigo: 'PME3100', nome: 'MECÂNICA DOS SÓLIDOS', instituto: 'POLI', departamento: 'PME', ementa: '', isQuadrimestral: false, isEstagio: false, contaPresenca: true, avaliacoesAtivas: [], formulaFinal: '', avisosGerais: '', cor: _getColorForDepto('PME'), turmas: [
-        Turma(id: 't3', codigo: 'TA', professores: [], horarios: [HorarioAula(dia: 'QUINTA', inicio: '19:10', fim: '20:50', local: '', isLaboratorio: false, frequenciaLab: 0, datasCustomizadas: [], precisaEpi: false, epis: [])]),
-      ]),
-      Disciplina(id: '3', codigo: 'MAC0110', nome: 'INTRODUÇÃO À COMPUTAÇÃO', instituto: 'IME', departamento: 'MAC', ementa: '', isQuadrimestral: false, isEstagio: false, contaPresenca: true, avaliacoesAtivas: [], formulaFinal: '', avisosGerais: '', cor: _getColorForDepto('MAC'), turmas: [
-        Turma(id: 't4', codigo: 'T45', professores: [], horarios: [HorarioAula(dia: 'SEXTA', inicio: '07:30', fim: '09:10', local: '', isLaboratorio: false, frequenciaLab: 0, datasCustomizadas: [], precisaEpi: false, epis: [])]),
-      ]),
-    ];
+    _carregarDisciplinasDoHub();
 
     _fadeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeIn));
 
     WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _fadeController.forward(); });
 
+    // 🟢 BLINDAGEM CONTRA O TRAVAMENTO (hasClients)
     _instFocus.addListener(() {
       if (!_instFocus.hasFocus) {
         setState(() {
           _isInstTyping = false;
-          _verificarEAtualizarRoleta(_instCtrl.text, _currInstitutos, (idx) { _instScroll.jumpToItem(idx); _aplicarCascataInst(_currInstitutos[idx]); }, () => _instCtrl.text = _currInstitutos.isNotEmpty ? _currInstitutos[_instScroll.selectedItem] : '');
+          _verificarEAtualizarRoleta(_instCtrl.text, _currInstitutos, (idx) { 
+            if (_instScroll.hasClients) _instScroll.jumpToItem(idx); 
+            _aplicarCascataInst(_currInstitutos[idx]); 
+          }, () {
+            _instCtrl.text = (_instScroll.hasClients && _currInstitutos.isNotEmpty) ? _currInstitutos[_instScroll.selectedItem] : '';
+          });
         });
       }
     });
@@ -196,7 +246,12 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
       if (!_deptFocus.hasFocus) {
         setState(() {
           _isDeptTyping = false;
-          _verificarEAtualizarRoleta(_deptCtrl.text, _currDeptos, (idx) { _deptScroll.jumpToItem(idx); _aplicarCascataDept(_currDeptos[idx]); }, () => _deptCtrl.text = _currDeptos.isNotEmpty ? _currDeptos[_deptScroll.selectedItem] : '');
+          _verificarEAtualizarRoleta(_deptCtrl.text, _currDeptos, (idx) { 
+            if (_deptScroll.hasClients) _deptScroll.jumpToItem(idx); 
+            _aplicarCascataDept(_currDeptos[idx]); 
+          }, () {
+            _deptCtrl.text = (_deptScroll.hasClients && _currDeptos.isNotEmpty) ? _currDeptos[_deptScroll.selectedItem] : '';
+          });
         });
       }
     });
@@ -205,10 +260,30 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
       if (!_turmaFocus.hasFocus) {
         setState(() {
           _isTurmaTyping = false;
-          _verificarEAtualizarRoleta(_turmaCtrl.text, _currTurmasStr, (idx) { _turmaScroll.jumpToItem(idx); _aplicarCascataTurma(_currTurmasStr[idx]); }, () => _turmaCtrl.text = _currTurmasStr.isNotEmpty ? _currTurmasStr[_turmaScroll.selectedItem] : '');
+          _verificarEAtualizarRoleta(_turmaCtrl.text, _currTurmasStr, (idx) { 
+            if (_turmaScroll.hasClients) _turmaScroll.jumpToItem(idx); 
+            _aplicarCascataTurma(_currTurmasStr[idx]); 
+          }, () {
+            _turmaCtrl.text = (_turmaScroll.hasClients && _currTurmasStr.isNotEmpty) ? _currTurmasStr[_turmaScroll.selectedItem] : '';
+          });
         });
       }
     });
+  }
+
+  Future<void> _carregarDisciplinasDoHub() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('disciplinas')
+        .where('isVerificada', isEqualTo: true) // Puxa só as aprovadas!
+        .get();
+    
+    if (mounted) {
+      setState(() {
+        _todasDisciplinasGlobais = snapshot.docs
+            .map((doc) => Disciplina.fromMap(doc.id, doc.data()))
+            .toList();
+      });
+    }
   }
 
   void _verificarEAtualizarRoleta(String typedText, List<String> list, Function(int) onSuccess, Function() onFail) {
@@ -238,7 +313,7 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
     return _masterDeptos.values.expand((e) => e).toList();
   }
   List<Disciplina> get _currDisciplinas {
-    return _mockDisciplinasList.where((d) {
+    return _todasDisciplinasGlobais.where((d) {
       bool matchInst = _instCtrl.text.isEmpty || d.instituto.toUpperCase() == _instCtrl.text.toUpperCase();
       bool matchDept = _deptCtrl.text.isEmpty || d.departamento.toUpperCase() == _deptCtrl.text.toUpperCase();
       bool matchBusca = _buscaDiscCtrl.text.isEmpty || d.nome.toLowerCase().contains(_buscaDiscCtrl.text.toLowerCase()) || d.codigo.toLowerCase().contains(_buscaDiscCtrl.text.toLowerCase());
@@ -251,7 +326,8 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
   }
 
   void _marcarAlteracao() {
-    if (!_teveAlteracao) setState(() => _teveAlteracao = true);
+    // Apenas mexer nos campos libera o botão de reset, mas não muda o botão VOLTAR
+    if (!_teveInteracao) setState(() => _teveInteracao = true);
   }
 
   void _aplicarCascataInst(String inst) {
@@ -346,16 +422,18 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
         _disciplinaPreview = null;
         _turmaPreview = null;
         _turmaCtrl.clear();
-        _teveAlteracao = false; 
+        _teveInteracao = true;   // Garante que o reset continue aparecendo
+        _gradeModificada = true; // 🟢 AGORA SIM o botão vira "SALVAR"
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sua nova grade foi salva com sucesso!')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina adicionada à grade!')));
     }
   }
   
   void _resetarAlteracoes() {
     setState(() {
       _disciplinas = List.from(widget.initialDisciplinas); 
-      _teveAlteracao = false; 
+      _gradeModificada = false; // 🟢 Volta para o botão "VOLTAR"
+      _teveInteracao = false;   // 🟢 Esconde o botão de Reset
       _disciplinaPreview = null;
       _turmaPreview = null;
       _instCtrl.clear();
@@ -379,10 +457,6 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
   Widget build(BuildContext context) {
     final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     
-    // 🟢 MATEMÁTICA PURA E BLINDADA
-    // O teto máximo que a grade pode chegar para exibir as 11 linhas NATIVAMENTE
-    final double _alturaMaximaDaGrade = (11 * _tamanhoLinhaHora) + 40.0 + _espacoTopoAntesDo7 + _margemExtraFimGrade;
-
     return Scaffold(
       backgroundColor: _corFundoGrade,
       resizeToAvoidBottomInset: false, 
@@ -394,53 +468,44 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
               top: 0, left: 0, right: 0,
               bottom: _alturaBarraInferior,
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  // 🟢 FLEXIBLE E CONSTRAINED BOX: 
-                  // Isso resolve TODOS os bugs zebrados. A grade pode crescer no máximo o tamanho das 11 linhas.
-                  // E se o teclado subir (ou as ferramentas crescerem), a grade ENCOLHE e vira rolável!
-                  Flexible(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: _larguraMaximaParaTablets,
-                        maxHeight: _alturaMaximaDaGrade, 
-                        minHeight: _minAlturaDaGrade, // Não deixa a grade sumir totalmente
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.only(left: _margemLateralExterna, right: _margemLateralExterna, top: _distanciaTetoTela),
-                        child: ClipRRect(
-                          child: Hero(
-                            tag: 'grade-hero',
-                            child: Material(
-                              type: MaterialType.transparency,
-                              child: CustomPaint(
-                                foregroundPainter: _GradientBorderPainter(
-                                  strokeWidth: _espessuraBordaHero,
-                                  radius: _raioBordaHero,
-                                  gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [_corBordaInicio, _corBordaFim]),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(_raioBordaHero - (_espessuraBordaHero / 2)),
-                                  child: Container(
-                                    color: _corFundoGrade,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        Padding(
-                                          padding: EdgeInsets.only(top: _paddingTopInterno, left: _paddingLateralInterno, right: _paddingLateralInterno),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text('GRADE HORÁRIA', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoTitulo, fontWeight: FontWeight.w700, color: _corTitulo)),
-                                              Text('24 Č', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoTitulo, fontWeight: FontWeight.w700, color: _corTitulo)),
-                                            ],
-                                          ),
+                  // 🟢 A MÁGICA: O Expanded engole TODO o espaço que sobra na tela do celular.
+                  // Se o celular for gigante, a grade cresce. Se abrir o teclado ou a busca, a grade encolhe e vira scroll!
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(left: _margemLateralExterna, right: _margemLateralExterna, top: _distanciaTetoTela),
+                      child: ClipRRect(
+                        child: Hero(
+                          tag: 'grade-hero',
+                          child: Material(
+                            type: MaterialType.transparency,
+                            child: CustomPaint(
+                              foregroundPainter: _GradientBorderPainter(
+                                strokeWidth: _espessuraBordaHero,
+                                radius: _raioBordaHero,
+                                gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [_corBordaInicio, _corBordaFim]),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(_raioBordaHero - (_espessuraBordaHero / 2)),
+                                child: Container(
+                                  color: _corFundoGrade,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Padding(
+                                        padding: EdgeInsets.only(top: _paddingTopInterno, left: _paddingLateralInterno, right: _paddingLateralInterno),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text('GRADE HORÁRIA', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoTitulo, fontWeight: FontWeight.w700, color: _corTitulo)),
+                                            Text('24 Č', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoTitulo, fontWeight: FontWeight.w700, color: _corTitulo)),
+                                          ],
                                         ),
-                                        SizedBox(height: _espacoTituloGrade),
-                                        // 🟢 Expanded Interno para permitir a rolagem das linhas.
-                                        Expanded(child: _buildGradeInternal()),
-                                      ],
-                                    ),
+                                      ),
+                                      SizedBox(height: _espacoTituloGrade),
+                                      // O LayoutBuilder aqui dentro descobre exatamente o espaço que tem pra desenhar as horas!
+                                      Expanded(child: _buildGradeInternal()),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -451,13 +516,13 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
                     ),
                   ),
                   
-                  // FERRAMENTAS E TEXTOS INFERIORES
+                  // FERRAMENTAS E TEXTOS INFERIORES: Não sobrou vazio nenhum!
                   FadeTransition(
                     opacity: _fadeAnimation,
                     child: _buildToolControls(),
                   ),
 
-                  // 🟢 MOLA DO TECLADO: Substitui o Spacer e garante a subida com a altura precisa!
+                  // MOLA DO TECLADO: Joga tudo pra cima (esmagando a grade)
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
                     curve: Curves.easeOutCubic,
@@ -483,7 +548,8 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
   Widget _buildGradeInternal() {
     final List<String> diasDaSemana = ['SEG', 'TER', 'QUA', 'QUI', 'SEX'];
     
-    int calcMaxHour = 17; // 🟢 SEMPRE garante que vai renderizar até às 17h
+    // 🟢 LIMITA A GRADE ATÉ AS 22h NATIVAMENTE! 
+    int calcMaxHour = 22; 
     void analisarTempo(Turma t) {
       for (var h in t.horarios) {
         int fim = _timeToMin(h.fim);
@@ -496,6 +562,7 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
 
     final int horaInicio = 7;
     final int horaFim = calcMaxHour;
+    final int totalRows = horaFim - horaInicio + 1; // 7h às 22h = 16 linhas
     
     final now = DateTime.now();
     double currentHourDecimal = now.hour + (now.minute / 60.0);
@@ -505,17 +572,26 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
       builder: (context, constraints) {
         final double topOffset = 40.0; 
         final double safeWidth = constraints.maxWidth.isInfinite ? MediaQuery.of(context).size.width : constraints.maxWidth;
+        final double safeHeight = constraints.maxHeight;
 
         final double leftOffset = _distanciaNumerosEsquerda + _larguraColunaHoras + _distanciaHoraLinha;
         final double columnWidth = math.max(0.0, safeWidth - leftOffset - _paddingLateralInterno) / 5; 
         
-        // 🟢 AS LINHAS NUNCA MUDAM DE TAMANHO MAIS! Elas são fixas em 38.0
-        final double rowHeight = _tamanhoLinhaHora;
-        final double totalGridHeight = (rowHeight * (horaFim - horaInicio + 1)) + _espacoTopoAntesDo7 + _margemExtraFimGrade;
+        // CÁLCULO FÍSICO DO TAMANHO DAS LINHAS
+        double heightLivreParaLinhas = safeHeight - topOffset - _espacoTopoAntesDo7 - _margemExtraFimGrade;
+        double dynamicRowHeight = heightLivreParaLinhas / totalRows; 
+        final double rowHeight = dynamicRowHeight.clamp(_alturaMinimaLinha, _alturaMaximaLinha);
+        final double totalGridHeight = (rowHeight * totalRows) + _espacoTopoAntesDo7 + _margemExtraFimGrade;
 
         List<Widget> buildBlocosDasDisciplinas() {
           List<Widget> blocos = [];
           void posicionarBlocos(Disciplina d, Turma t, bool isPreview) {
+            
+            // 🟢 MÁGICA DO REGEX: Separa Letras (PQI) e Números (3305)
+            String codigoPuro = d.codigo.trim().toUpperCase();
+            String sigla = codigoPuro.replaceAll(RegExp(r'[0-9]'), '');
+            String numeros = codigoPuro.replaceAll(RegExp(r'[^0-9]'), '');
+
             for (var hor in t.horarios) {
               int diaIndex = ['SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA'].indexOf(hor.dia.toUpperCase());
               if (diaIndex == -1) continue;
@@ -526,10 +602,29 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
 
               double top = _espacoTopoAntesDo7 + ((startMin - (horaInicio * 60)) / 60) * rowHeight;
               double height = ((endMin - startMin) / 60) * rowHeight;
-              double left = leftOffset + (diaIndex * columnWidth);
+              
+              // 🟢 CENTRALIZAÇÃO EXATA DOS BLOCOS E LARGURA CONTROLÁVEL
+              double leftCentro = leftOffset + (diaIndex * columnWidth);
+              double blockWidth = _larguraDosBlocosGrade; 
+              double leftPos = leftCentro + (columnWidth - blockWidth) / 2;
 
-              double blockWidth = columnWidth - 4; 
-              double leftPos = left + 2;
+              Widget conteudoTexto = Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    sigla, 
+                    style: TextStyle(fontFamily: 'Aristotelica', fontWeight: _pesoSiglaBloco, fontSize: _tamanhoSiglaBloco, color: Colors.white, height: 1.0, shadows: isPreview ? [Shadow(color: d.cor.withOpacity(0.8), blurRadius: 2)] : null),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (numeros.isNotEmpty) SizedBox(height: _espacoLetrasNumeros),
+                  if (numeros.isNotEmpty) Text(
+                    numeros, 
+                    style: TextStyle(fontFamily: 'Aristotelica', fontWeight: _pesoNumeroBloco, fontSize: _tamanhoNumeroBloco, color: Colors.white, height: 1.0, shadows: isPreview ? [Shadow(color: d.cor.withOpacity(0.8), blurRadius: 2)] : null),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              );
 
               Widget box;
               if (isPreview) {
@@ -538,12 +633,12 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
 
                 box = DottedContainer(
                   color: dashColor.withOpacity(0.15), borderColor: dashColor, strokeWidth: 2.0, dashPattern: const [4, 4], borderRadius: BorderRadius.circular(6.0),
-                  child: Center(child: Text(d.codigo, style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white, shadows: [Shadow(color: dashColor.withOpacity(0.8), blurRadius: 2)]))),
+                  child: Center(child: conteudoTexto),
                 );
               } else {
                 box = Container(
                   decoration: BoxDecoration(color: d.cor, borderRadius: BorderRadius.circular(6.0)),
-                  child: Center(child: Text(d.codigo, style: const TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white))),
+                  child: Center(child: conteudoTexto),
                 );
               }
 
@@ -579,21 +674,21 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
             
             Expanded(
               child: ShaderMask(
-                shaderCallback: (Rect bounds) => const LinearGradient(
+                shaderCallback: (Rect bounds) => LinearGradient(
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
-                  stops: [0.0, 0.05, 0.95, 1.0], 
+                  colors: [Colors.transparent, Colors.white, Colors.white],
+                  stops: [0.0, _tamanhoFadeTopGrade, 1.0], 
                 ).createShader(bounds),
                 blendMode: BlendMode.dstIn,
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   child: SizedBox(
-                    height: totalGridHeight, // Essa altura interna controla o scroll!
+                    height: totalGridHeight,
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
                         Column(
-                          children: List.generate((horaFim - horaInicio + 1), (index) {
+                          children: List.generate((totalRows), (index) {
                             return Padding(
                               padding: EdgeInsets.only(top: index == 0 ? _espacoTopoAntesDo7 : 0.0),
                               child: SizedBox(
@@ -606,14 +701,15 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
                                       width: _larguraColunaHoras,
                                       child: Text('${horaInicio + index}', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoFonteHoras, color: const Color(0xFFBCBEBF), height: 1.0), textAlign: TextAlign.center),
                                     ),
-                                    SizedBox(width: _distanciaHoraLinha),
+                                    // 🟢 CONTROLE DA LINHA: Adicionados os recuos esquerdo e direito para alinhar com a caixa
+                                    SizedBox(width: _distanciaHoraLinha + _recuoLinhaEsquerda),
                                     Expanded(
                                       child: Padding(
                                         padding: EdgeInsets.only(top: _ajusteVerticalLinhaHora), 
                                         child: Container(height: _espessuraLinhaHorizontal, decoration: BoxDecoration(color: _corLinhaHorizontal, borderRadius: BorderRadius.circular(_raioBordaLinha))),
                                       )
                                     ),
-                                    SizedBox(width: _paddingLateralInterno), 
+                                    SizedBox(width: _paddingLateralInterno + _recuoLinhaDireita), 
                                   ],
                                 ),
                               ),
@@ -823,29 +919,26 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
             secondChild: Column(
               children: [
                 Container(height: 1.5, color: _corBordaInativa.withOpacity(0.3)), 
+                // 🟢 REMOVIDO O FADE DA LISTA E SETADO O LIMITE DA BUSCA
                 Container(
                   constraints: BoxConstraints(maxHeight: _maxAlturaListaPesquisa), 
-                  child: ShaderMask(
-                    shaderCallback: (Rect bounds) => const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent], stops: [0.0, 0.05, 0.95, 1.0]).createShader(bounds),
-                    blendMode: BlendMode.dstIn,
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(), 
-                      child: Column(
-                        children: results.isEmpty 
-                          ? [Padding(padding: const EdgeInsets.all(16.0), child: Text('NENHUMA ENCONTRADA', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTextoDicaBotoes, color: _corDicaInput)))]
-                          : results.map((d) {
-                            return GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => _selecionarDisciplinaDaLista(d),
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 11),
-                                decoration: BoxDecoration(border: d != results.last ? Border(bottom: BorderSide(color: _corBordaInativa.withOpacity(0.3), width: 1)) : null),
-                                child: Text('${d.codigo} - ${d.nome}', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTextoBotoes, color: _corTextoDigitado)),
-                              ),
-                            );
-                          }).toList(),
-                      ),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(), 
+                    child: Column(
+                      children: results.isEmpty 
+                        ? [Padding(padding: const EdgeInsets.all(16.0), child: Text('NENHUMA ENCONTRADA', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTextoDicaBotoes, color: _corDicaInput)))]
+                        : results.map((d) {
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _selecionarDisciplinaDaLista(d),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 11),
+                              decoration: BoxDecoration(border: d != results.last ? Border(bottom: BorderSide(color: _corBordaInativa.withOpacity(0.3), width: 1)) : null),
+                              child: Text('${d.codigo} - ${d.nome}', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTextoBotoes, color: _corTextoDigitado)),
+                            ),
+                          );
+                        }).toList(),
                     ),
                   ),
                 ),
@@ -944,10 +1037,20 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
                   SizedBox(
                     width: 95.0, height: 40.0,
                     child: GestureDetector(
-                      onTap: () {
-                        if (_teveAlteracao) {
-                          setState(() => _teveAlteracao = false);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sua nova grade foi salva com sucesso!')));
+                      onTap: () async { // 🟢 TRANSFORMADO EM ASYNC
+                        if (_gradeModificada) {
+                          // 🟢 MÁGICA: Inscreve o aluno nas novas disciplinas que ele puxou pra grade!
+                          for (var novaDisc in _disciplinas) {
+                            // Se a disciplina não estava na grade inicial, inscreve no Firebase
+                            if (!widget.initialDisciplinas.any((d) => d.id == novaDisc.id)) {
+                              await FirestoreService().inscreverEmDisciplina(novaDisc.id);
+                            }
+                          }
+                          
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sua nova grade foi salva com sucesso!')));
+                            context.pop(); 
+                          }
                         } else {
                           context.pop();
                         }
@@ -963,7 +1066,7 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
                               alignment: Alignment.center,
                               child: Padding(
                                 padding: const EdgeInsets.only(top: 3.0), 
-                                child: Text(_teveAlteracao ? 'SALVAR' : 'VOLTAR', style: const TextStyle(fontFamily: 'Aristotelica', color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16, letterSpacing: 1.2))
+                                child: Text(_gradeModificada ? 'SALVAR' : 'VOLTAR', style: const TextStyle(fontFamily: 'Aristotelica', color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16, letterSpacing: 1.2))
                               ),
                             ),
                           ),
@@ -972,7 +1075,8 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
                     ),
                   ),
                   
-                  if (_teveAlteracao) ...[
+                  // 🟢 O Reset aparece se teve QUALQUER interação na tela
+                  if (_teveInteracao) ...[
                     SizedBox(width: _espacoBotaoAteReset),
                     GestureDetector(
                       onTap: _resetarAlteracoes,

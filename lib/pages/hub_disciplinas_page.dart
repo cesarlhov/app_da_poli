@@ -7,6 +7,7 @@ import 'package:app_da_poli/providers/user_provider.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class HubDisciplinasPage extends StatefulWidget {
   const HubDisciplinasPage({super.key});
@@ -82,9 +83,24 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                               children: [
                                 if (disciplina.isVerificada)
                                   const Icon(Icons.verified, color: Colors.blue, size: 22)
-                                else
+                                else ...[
                                   const Icon(Icons.pending_actions, color: Colors.orange, size: 22),
+                                  
+                                  // 🟢 SE FOR GRÊMIO/ADMIN, MOSTRA O BOTÃO DE APROVAR!
+                                  if (currentUser.isGremio)
+                                    IconButton(
+                                      icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 26),
+                                      tooltip: 'Aprovar Disciplina',
+                                      onPressed: () async {
+                                        await _firestoreService.aprovarDisciplina(disciplina.id);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina aprovada e visível para todos!'), backgroundColor: Colors.green));
+                                        }
+                                      },
+                                    ),
+                                ],
                                 
+                                // 🟢 BOTAO DE EDITAR (Disponível para Grêmio e RC)
                                 if (isAdmin) ...[
                                   const SizedBox(width: 8),
                                   IconButton(
@@ -93,7 +109,6 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                                     constraints: const BoxConstraints(),
                                     tooltip: 'Editar Disciplina',
                                     onPressed: () {
-                                      // 🟢 O Pop-up antigo foi apagado. No futuro chamaremos a Tela de Criação aqui!
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(content: Text('A edição será feita pela nova tela em breve!')),
                                       );
@@ -110,26 +125,45 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                         Text('Depto: ${disciplina.departamento} • ${disciplina.numeroInscritos} alunos', style: TextStyle(color: Colors.grey[700])),
                         const SizedBox(height: 16),
                         
+                        // 🟢 BOTÃO DE INSCREVER / DESMATRICULAR
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: () async {
-                                final mensageiro = ScaffoldMessenger.of(context); 
+                              final mensageiro = ScaffoldMessenger.of(context); 
+                              if (jaInscrito) {
+                                await _firestoreService.desmatricularDeDisciplina(disciplina.id);
+                                mensageiro.showSnackBar(SnackBar(content: Text('Matrícula cancelada em ${disciplina.codigo}'), backgroundColor: Colors.orange));
+                              } else {
                                 await _firestoreService.inscreverEmDisciplina(disciplina.id);
-                                mensageiro.showSnackBar(
-                                  SnackBar(content: Text('Inscrito em ${disciplina.codigo}')),
-                                );
-                              },
-                            icon: Icon(jaInscrito ? Icons.check : Icons.add),
-                            label: Text(jaInscrito ? 'Já Inscrito' : 'Inscrever-se'),
+                                mensageiro.showSnackBar(SnackBar(content: Text('Inscrito em ${disciplina.codigo}'), backgroundColor: Colors.green));
+                              }
+                            },
+                            icon: Icon(jaInscrito ? Icons.remove_circle_outline : Icons.add),
+                            label: Text(jaInscrito ? 'Desmatricular' : 'Inscrever-se'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: jaInscrito ? Colors.green : const Color(0xFF0460E9),
+                              backgroundColor: jaInscrito ? Colors.red : const Color(0xFF0460E9),
                               foregroundColor: Colors.white,
-                              disabledBackgroundColor: Colors.green.withAlpha(150),
-                              disabledForegroundColor: Colors.white,
                             ),
                           ),
                         ),
+                        
+                        // 🟢 BOTÃO DE APROVAÇÃO DIRETO NO APP (APENAS PARA O GRÊMIO)
+                        if (!disciplina.isVerificada && currentUser.isGremio) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                await FirebaseFirestore.instance.collection('disciplinas').doc(disciplina.id).update({'isVerificada': true});
+                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina Aprovada!'), backgroundColor: Colors.green));
+                              },
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text('Aprovar Oficialmente'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                            ),
+                          ),
+                        ]
                       ],
                     ),
                   ),

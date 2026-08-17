@@ -113,6 +113,11 @@ class Disciplina {
   final bool isVerificada;
   final int numeroInscritos;
 
+  // 🟢 OS TRÊS NOVOS CAMPOS ADICIONADOS AQUI!
+  final Timestamp dataInicio;
+  final Timestamp dataFim;
+  final int totalAulasEstimadas;
+
   Disciplina({
     required this.id,
     required this.codigo,
@@ -130,31 +135,40 @@ class Disciplina {
     required this.cor,
     this.isVerificada = false,
     this.numeroInscritos = 0,
+    required this.dataInicio, // 🟢 ADICIONADO AO CONSTRUTOR
+    required this.dataFim, // 🟢 ADICIONADO AO CONSTRUTOR
+    required this.totalAulasEstimadas, // 🟢 ADICIONADO AO CONSTRUTOR
   });
 
-  static Color _obterCorDoDepartamento(String inst) {
-    const Map<String, Color> coresOficiais = {
-      'POLI': Color(0xFF0460E9), // Azul Poli
-      'IME': Color(0xFFE04F44),
-      'IF': Color(0xFF4CAF50),
-      'IQ': Color(0xFF9C27B0),
-      'ICG': Color(0xFFFF9800),
-    };
-    final sigla = inst.toUpperCase().split(' ').first.trim();
-    if (coresOficiais.containsKey(sigla)) return coresOficiais[sigla]!;
+  static Color _obterCorDoDepartamento(String depto) {
+    // 🟢 Mapeamento Oficial de Cores das Engenharias da Poli
+    final sigla = depto.split('-').first.toUpperCase().trim();
     
+    if (['PCC', 'PEF', 'PTR'].contains(sigla)) return const Color(0xFFDF9B04); // Civil
+    if (['PHA'].contains(sigla)) return const Color(0xFF8E44AD); // Ambiental
+    if (['PQI'].contains(sigla)) return const Color(0xFF1F4AB7); // Química
+    if (['PME', 'PMR'].contains(sigla)) return const Color(0xFF722F37); // Mecânica/Mecatrônica
+    if (['PRO'].contains(sigla)) return const Color(0xFF3E8E41); // Produção
+    if (['PCS', 'PTC', 'PSI', 'PEA'].contains(sigla)) return const Color(0xFF0D47A1); // Elétrica/Computação
+    if (['PMT', 'PMI'].contains(sigla)) return const Color(0xFFFF9800); // Materiais/Minas/Petróleo
+    if (['PNV'].contains(sigla)) return const Color(0xFF2B2B2C); // Naval
+
+    // Fallback: Se for de outro instituto (IME, IF, IQ), gera cor fixa pelo nome
     final random = Random(sigla.hashCode);
     return Color.fromRGBO(random.nextInt(100) + 80, random.nextInt(100) + 80, random.nextInt(100) + 80, 1);
   }
 
   factory Disciplina.fromMap(String id, Map<String, dynamic> data) {
-    final inst = data['instituto'] ?? 'POLI';
+    // 🟢 1. Extraímos o departamento para calcular a cor oficial
+    final String depto = data['departamento'] ?? 'Geral';
+    final String inst = data['instituto'] ?? 'POLI';
+
     return Disciplina(
       id: id,
       codigo: data['codigo'] ?? '',
       nome: data['nome'] ?? '',
       instituto: inst,
-      departamento: data['departamento'] ?? '',
+      departamento: depto,
       ementa: data['ementa'] ?? '',
       isQuadrimestral: data['isQuadrimestral'] ?? false,
       isEstagio: data['isEstagio'] ?? false,
@@ -165,9 +179,15 @@ class Disciplina {
       turmas: (data['turmas'] as List<dynamic>? ?? [])
           .map((t) => Turma.fromMap(t as Map<String, dynamic>))
           .toList(),
-      cor: data['cor'] != null ? Color(int.parse(data['cor'])) : _obterCorDoDepartamento(inst),
+      // 🟢 2. Aplica a cor nova ignorando o banco de dados!
+      cor: _obterCorDoDepartamento(depto),
       isVerificada: data['isVerificada'] ?? false,
       numeroInscritos: data['numeroInscritos'] ?? 0,
+      
+      // 🟢 3. LENDO AS DATAS DO FIREBASE (com fallback para hoje)
+      dataInicio: data['dataInicio'] ?? Timestamp.now(), 
+      dataFim: data['dataFim'] ?? Timestamp.now(), 
+      totalAulasEstimadas: data['totalAulasEstimadas'] ?? 30, 
     );
   }
 
@@ -185,9 +205,14 @@ class Disciplina {
       'formulaFinal': formulaFinal,
       'avisosGerais': avisosGerais,
       'turmas': turmas.map((t) => t.toMap()).toList(),
-      'cor': cor.value.toString(),
+      // 'cor': cor.value.toString(), // 🟢 Não enviaremos mais cor ao Firebase!
       'isVerificada': isVerificada,
       'numeroInscritos': numeroInscritos,
+      
+      // 🟢 4. SALVANDO AS DATAS NO FIREBASE
+      'dataInicio': dataInicio,
+      'dataFim': dataFim,
+      'totalAulasEstimadas': totalAulasEstimadas,
     };
   }
 }
