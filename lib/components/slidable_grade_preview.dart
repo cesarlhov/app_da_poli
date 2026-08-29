@@ -329,7 +329,7 @@ class _MiniGradePreview extends StatelessWidget {
     // 1. Fase de Descoberta: Ajusta o tamanho da grade e o almoço
     for (var d in disciplinas) {
       var turmasValidas = d.turmas.where((t) => turmasIds.contains(t.id)).toList();
-      if (turmasValidas.isEmpty) turmasValidas = d.turmas; // Fallback se o banco não tiver turmasIds salvas ainda
+      if (turmasValidas.isEmpty) turmasValidas = d.turmas;
 
       for (var t in turmasValidas) {
         for (var hor in t.horarios) {
@@ -352,12 +352,9 @@ class _MiniGradePreview extends StatelessWidget {
     int minTimeManha = min(450, minMins);
     int maxTimeTarde = max(1000, maxMins);
 
-    // 🟢 MÁGICA 1: As caixas da manhã e tarde crescem sozinhas se a aula for muito cedo ou muito tarde!
     double alturaManha = (660 - minTimeManha) * pixelsPorMinuto;
     double alturaTarde = (maxTimeTarde - 790) * pixelsPorMinuto;
     
-    // 🟢 MÁGICA 2: O espaço do almoço deixa de ser um "vão visual" e passa a ser mapeado em minutos 
-    // se existir qualquer disciplina nesse horário, acompanhando a proporção do resto da grade.
     double alturaAlmoco = hasLunchAny 
         ? (130 * pixelsPorMinuto) 
         : (espacoAcimaLinha + _linhaAlmocoEspessura + espacoAbaixoLinha);
@@ -396,10 +393,19 @@ class _MiniGradePreview extends StatelessWidget {
     List<Widget> classBlocks = [];
     double fadeOutTexto = (1.0 - (scrollProgress / 0.70)).clamp(0.0, 1.0);
 
-    // 2. Fase de Construção: Cria os Bloquinhos Coloridos
+    // 2. Fase de Construção: Cria os Bloquinhos Coloridos com Efeito 3D
     for (var d in disciplinas) {
       String siglaPura = d.codigo.replaceAll(RegExp(r'[^A-Za-z]'), '').toUpperCase();
-      Color corBloco = siglaPura == 'PQI' ? _corEspecialPQI : d.cor;
+      
+      // 🟢 OBTENDO AS CORES DO DEGRADÊ
+      PaletaDisciplina paleta = Disciplina.obterPaleta(d.departamento);
+      Color corBase = paleta.fundoFim;    // 3ª cor (mais escura, fundo 3D)
+      Color corTopo = paleta.fundoInicio; // 2ª cor (mais clara, frente)
+
+      if (siglaPura == 'PQI') {
+        corBase = const Color(0xFF0D41A9);
+        corTopo = const Color(0xFF0460E9);
+      }
 
       var turmasValidas = d.turmas.where((t) => turmasIds.contains(t.id)).toList();
       if (turmasValidas.isEmpty) turmasValidas = d.turmas;
@@ -415,26 +421,56 @@ class _MiniGradePreview extends StatelessWidget {
           
           int diaIndex = ['SEGUNDA','TERÇA','QUARTA','QUINTA','SEXTA'].indexOf(hor.dia.toUpperCase());
           if (diaIndex != -1) {
+            
+            // 🟢 MATEMÁTICA DO EFEITO 3D
+            double maxOffset = 4.0;
+            double currentOffset = maxOffset * (1.0 - scrollProgress);
+
             classBlocks.add(
               Positioned(
                 top: top, left: diaIndex * (colWidth + _espacoEntreColunas), width: colWidth, height: height,
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 0.5, vertical: 0.5),
-                  decoration: BoxDecoration(color: corBloco, borderRadius: BorderRadius.circular(_pontilhadoRaio)),
-                  alignment: Alignment.topCenter,
-                  padding: EdgeInsets.only(top: _paddingTopTextoBloco * _escalaAlturaGrade), 
-                  child: Opacity(
-                    opacity: (fadeOutTexto * _opacidadeTextoBloco).clamp(0.0, 1.0), 
-                    child: Text(
-                      siglaPura, 
-                      style: TextStyle(
-                        fontFamily: 'Aristotelica', 
-                        fontWeight: _pesoFonteBloco, 
-                        fontSize: _tamanhoTextoBloco * _escalaAlturaGrade, 
-                        color: _corTextoBloco,
-                        height: 1.0, 
-                      )
-                    ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // 🟩 CAMADA 1: Retângulo Base (3ª Cor - Sombra 3D)
+                      Positioned.fill(
+                        top: currentOffset,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: corBase, 
+                            borderRadius: BorderRadius.circular(_pontilhadoRaio)
+                          ),
+                        ),
+                      ),
+                      
+                      // 🟩 CAMADA 2: Retângulo Topo (2ª Cor - Frente e Texto)
+                      Positioned.fill(
+                        bottom: currentOffset,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: corTopo, 
+                            borderRadius: BorderRadius.circular(_pontilhadoRaio)
+                          ),
+                          alignment: Alignment.topCenter,
+                          padding: EdgeInsets.only(top: (_paddingTopTextoBloco * _escalaAlturaGrade) - 1.0), 
+                          child: Opacity(
+                            opacity: (fadeOutTexto * _opacidadeTextoBloco).clamp(0.0, 1.0), 
+                            child: Text(
+                              siglaPura, 
+                              style: TextStyle(
+                                fontFamily: 'Aristotelica', 
+                                fontWeight: _pesoFonteBloco, 
+                                fontSize: _tamanhoTextoBloco * _escalaAlturaGrade, 
+                                color: _corTextoBloco,
+                                height: 1.0, 
+                              )
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 )
               )
@@ -448,7 +484,6 @@ class _MiniGradePreview extends StatelessWidget {
     List<Widget> lineSegments = [];
     int startIdx = -1;
 
-    // 🟢 MÁGICA 3: Mantém a linha perfeitamente centralizada quer o vão seja pequeno ou o bloco do almoço tenha expandido!
     double linhaY = hasLunchAny 
         ? alturaManha + (alturaAlmoco / 2) - (_linhaAlmocoEspessura / 2)
         : alturaManha + espacoAcimaLinha;

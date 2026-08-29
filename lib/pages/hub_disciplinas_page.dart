@@ -8,6 +8,7 @@ import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:app_da_poli/pages/criar_disciplina_page.dart';
 
 class HubDisciplinasPage extends StatefulWidget {
   const HubDisciplinasPage({super.key});
@@ -19,14 +20,58 @@ class HubDisciplinasPage extends StatefulWidget {
 class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
   final FirestoreService _firestoreService = FirestoreService();
 
+  void _matricularNaDisciplina(BuildContext context, Disciplina disciplina, UserModel currentUser) {
+    if (disciplina.turmas.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Esta disciplina ainda não tem turmas cadastradas.')));
+      return;
+    }
+
+    if (disciplina.turmas.length == 1) {
+      setState(() => currentUser.turmasIds.add(disciplina.turmas.first.id));
+      _firestoreService.matricular(disciplina.id, disciplina.turmas.first.id); 
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Matriculado com sucesso!'), backgroundColor: Colors.green));
+    } else {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('Escolha sua Turma', style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w900, color: Color(0xFF162038))),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: disciplina.turmas.length,
+              itemBuilder: (context, index) {
+                final turma = disciplina.turmas[index];
+                String resumo = turma.horarios.map((h) => '${h.dia} ${h.inicio}').join(' | ');
+                
+                return ListTile(
+                  title: Text(turma.codigo.isEmpty ? 'Turma ${index + 1}' : 'Turma ${turma.codigo}', style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Aristotelica')),
+                  subtitle: Text(resumo, style: const TextStyle(fontFamily: 'Lato', fontSize: 13)),
+                  trailing: const Icon(Icons.add_circle, color: Color(0xFF0460E9)),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    setState(() => currentUser.turmasIds.add(turma.id));
+                    await _firestoreService.matricular(disciplina.id, turma.id); 
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Matriculado com sucesso!'), backgroundColor: Colors.green));
+                    }
+                  },
+                );
+              }
+            )
+          )
+        )
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserProvider>();
     final currentUser = userProvider.currentUser;
 
-    if (currentUser == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    if (currentUser == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     final bool isAdmin = currentUser.isGremio || currentUser.isRC;
 
@@ -51,7 +96,8 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
             itemCount: disciplinas.length,
             itemBuilder: (context, index) {
               final disciplina = disciplinas[index];
-              final bool jaInscrito = currentUser.turmasIds.contains(disciplina.id);
+              // Checa dinamicamente se qualquer id das turmas do aluno bate com alguma turma dessa disciplina
+              final bool jaInscrito = currentUser.turmasIds.any((idTurma) => disciplina.turmas.any((t) => t.id == idTurma));
 
               return Card(
                 elevation: 3,
@@ -59,9 +105,7 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(12),
-                  onTap: () {
-                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => DisciplinaDetailsPage(disciplina: disciplina)));
-                  },
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => DisciplinaDetailsPage(disciplina: disciplina))),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -72,45 +116,61 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: disciplina.cor.withAlpha(50),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                              decoration: BoxDecoration(color: disciplina.cor.withAlpha(50), borderRadius: BorderRadius.circular(8)),
                               child: Text(disciplina.codigo, style: TextStyle(color: disciplina.cor, fontWeight: FontWeight.bold)),
                             ),
-                            
                             Row(
                               children: [
                                 if (disciplina.isVerificada)
                                   const Icon(Icons.verified, color: Colors.blue, size: 22)
                                 else ...[
                                   const Icon(Icons.pending_actions, color: Colors.orange, size: 22),
-                                  
-                                  // 🟢 SE FOR GRÊMIO/ADMIN, MOSTRA O BOTÃO DE APROVAR!
                                   if (currentUser.isGremio)
                                     IconButton(
                                       icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 26),
                                       tooltip: 'Aprovar Disciplina',
                                       onPressed: () async {
                                         await _firestoreService.aprovarDisciplina(disciplina.id);
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina aprovada e visível para todos!'), backgroundColor: Colors.green));
-                                        }
+                                        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina aprovada!'), backgroundColor: Colors.green));
                                       },
                                     ),
                                 ],
-                                
-                                // 🟢 BOTAO DE EDITAR (Disponível para Grêmio e RC)
                                 if (isAdmin) ...[
                                   const SizedBox(width: 8),
                                   IconButton(
                                     icon: const Icon(Icons.edit_note, color: Colors.black87),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    tooltip: 'Editar Disciplina',
+                                    padding: EdgeInsets.zero, constraints: const BoxConstraints(), tooltip: 'Editar',
                                     onPressed: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('A edição será feita pela nova tela em breve!')),
+                                      Navigator.of(context, rootNavigator: true).push(
+                                        MaterialPageRoute(
+                                          builder: (context) => CriarDisciplinaPage(disciplinaParaEditar: disciplina),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(width: 12),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                    padding: EdgeInsets.zero, constraints: const BoxConstraints(), tooltip: 'Excluir',
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          title: const Text('Tem certeza?', style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w900, color: Color(0xFF162038))),
+                                          content: Text('Excluir a disciplina ${disciplina.codigo}?', style: const TextStyle(fontFamily: 'Lato', fontSize: 16)),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('CANCELAR', style: TextStyle(fontFamily: 'Aristotelica', color: Colors.grey, fontWeight: FontWeight.w700))),
+                                            TextButton(
+                                              onPressed: () async {
+                                                Navigator.of(ctx).pop(); 
+                                                await _firestoreService.excluirDisciplina(disciplina.id);
+                                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina excluída!'), backgroundColor: Colors.red));
+                                              },
+                                              child: const Text('EXCLUIR', style: TextStyle(fontFamily: 'Aristotelica', color: Colors.red, fontWeight: FontWeight.w700)),
+                                            ),
+                                          ],
+                                        ),
                                       );
                                     },
                                   ),
@@ -125,45 +185,20 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
                         Text('Depto: ${disciplina.departamento} • ${disciplina.numeroInscritos} alunos', style: TextStyle(color: Colors.grey[700])),
                         const SizedBox(height: 16),
                         
-                        // 🟢 BOTÃO DE INSCREVER / DESMATRICULAR
+                        // 🟢 BOTÃO DO HUB: Focado apenas em desmatricular!
+                        // 🟢 BOTÃO DO HUB: Agora foca apenas em informar ou enviar para a Grade
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: () async {
-                              final mensageiro = ScaffoldMessenger.of(context); 
-                              if (jaInscrito) {
-                                await _firestoreService.desmatricularDeDisciplina(disciplina.id);
-                                mensageiro.showSnackBar(SnackBar(content: Text('Matrícula cancelada em ${disciplina.codigo}'), backgroundColor: Colors.orange));
-                              } else {
-                                await _firestoreService.inscreverEmDisciplina(disciplina.id);
-                                mensageiro.showSnackBar(SnackBar(content: Text('Inscrito em ${disciplina.codigo}'), backgroundColor: Colors.green));
-                              }
-                            },
-                            icon: Icon(jaInscrito ? Icons.remove_circle_outline : Icons.add),
-                            label: Text(jaInscrito ? 'Desmatricular' : 'Inscrever-se'),
+                            onPressed: null, // Desativado, pois a matrícula/desmatrícula foi movida para a Grade
+                            icon: Icon(jaInscrito ? Icons.check_circle : Icons.lock_outline),
+                            label: Text(jaInscrito ? 'Matriculado (Altere na Grade)' : 'Adicione na Editar Grade'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: jaInscrito ? Colors.red : const Color(0xFF0460E9),
-                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: jaInscrito ? Colors.green[100] : Colors.grey[200],
+                              disabledForegroundColor: jaInscrito ? Colors.green[800] : Colors.grey[500],
                             ),
                           ),
                         ),
-                        
-                        // 🟢 BOTÃO DE APROVAÇÃO DIRETO NO APP (APENAS PARA O GRÊMIO)
-                        if (!disciplina.isVerificada && currentUser.isGremio) ...[
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                await FirebaseFirestore.instance.collection('disciplinas').doc(disciplina.id).update({'isVerificada': true});
-                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina Aprovada!'), backgroundColor: Colors.green));
-                              },
-                              icon: const Icon(Icons.check_circle_outline),
-                              label: const Text('Aprovar Oficialmente'),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                            ),
-                          ),
-                        ]
                       ],
                     ),
                   ),

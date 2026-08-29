@@ -5,16 +5,27 @@ import 'package:flutter/services.dart';
 import 'package:app_da_poli/models/disciplina_model.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
 import 'package:intl/intl.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import 'package:app_da_poli/providers/user_provider.dart';
 
 class CriarDisciplinaPage extends StatefulWidget {
-  const CriarDisciplinaPage({super.key});
+  final Disciplina? disciplinaParaEditar; // 🟢 Se for passado, a tela vira "Edição"
+  const CriarDisciplinaPage({super.key, this.disciplinaParaEditar});
 
   @override
   State<CriarDisciplinaPage> createState() => _CriarDisciplinaPageState();
 }
 
 class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
+
+  // =========================================================================
+  // 🎛️ PAINEL DE CONTROLE - ABA DE HISTÓRICO (ANTERIORMENTE)
+  // =========================================================================
+  final double _espacoCimaTituloAba = 26.0; 
+  final double _espacoTituloAbaAteData = 0.0; 
+  final double _espacoDataAbaAteTexto = 3.0; 
+  final double _espacoEntreTextosAba = 2.0;
 
   bool _isLoadingSave = false; 
 
@@ -122,7 +133,8 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
 
   // 🟢 FONTES DO MINI CALENDÁRIO
   final double _tamanhoFonteCalendarioDias = 12.0; 
-  final double _tamanhoFonteCalendarioNumeros = 15.0; 
+  final double _tamanhoFonteCalendarioNumeros = 15.0;
+  final double _tamanhoFonteDatasCustomizadas = 15.0;
 
   // 🟢 VARIÁVEIS PARA O MINI CALENDÁRIO INLINE E CÉDULAS
   bool _isCalendarExpanded = false;
@@ -183,26 +195,136 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     if (mounted) setState(() {});
   }
 
-  void _resetarTudo() {
-    setState(() {
-      _codigoController.clear(); _nomeController.clear(); _institutoController.clear();
-      _departamentoController.clear(); _ementaController.clear(); _formulaController.clear(); 
-      _avisosController.clear();
-      
-      _inicioDataCtrl.clear(); _fimDataCtrl.clear();
-      _selecionouInicio = false; _selecionouFim = false; _tapStep = 2;
+  // 🟢 FUNÇÃO INTELIGENTE: Restaura a disciplina exatamente para o que estava no banco
+  void _carregarDadosIniciais() {
+    final d = widget.disciplinaParaEditar!;
+    
+    _codigoController.text = d.codigo;
+    _nomeController.text = d.nome;
+    _institutoController.text = d.instituto;
+    _departamentoController.text = d.departamento;
+    _ementaController.text = d.ementa;
+    
+    _isQuadrimestral = d.isQuadrimestral;
+    _isEstagio = d.isEstagio;
+    _contaPresenca = d.contaPresenca;
+    
+    _formulaController.text = d.formulaFinal;
+    _avisosController.text = d.avisosGerais;
+    
+    // Restaurando Datas
+    _dataInicio = d.dataInicio.toDate();
+    _dataFim = d.dataFim.toDate();
+    _selecionouInicio = true;
+    _selecionouFim = true;
+    _inicioDataCtrl.text = DateFormat('dd/MM/yy').format(_dataInicio);
+    _fimDataCtrl.text = DateFormat('dd/MM/yy').format(_dataFim);
+    _tapStep = 2;
+    _mesExibido = DateTime(_dataInicio.year, _dataInicio.month, 1);
+    
+    // Restaurando Avaliações
+    _avaliacoes.clear();
+    for (var aval in d.avaliacoesAtivas) {
+      _avaliacoes.add(AvaliacaoData(aval, true, isCustom: !['P1', 'P2', 'T1'].contains(aval)));
+    }
+    for (var def in ['P1', 'P2', 'T1']) {
+      if (!d.avaliacoesAtivas.contains(def)) _avaliacoes.add(AvaliacaoData(def, false));
+    }
 
-      _isQuadrimestral = false; _isEstagio = false; _contaPresenca = false;
-      _isDeptExpanded = false; _isInstitutoExpanded = false; 
-      
-      _isAddingAvaliacao = false;
-      _avaliacoes = [AvaliacaoData('P1', true), AvaliacaoData('P2', false), AvaliacaoData('T1', false)];
-      
-      for (var t in _turmas) { t.dispose(); }
-      _turmas.clear();
+    // Restaurando Turmas
+    for (var t in _turmas) { t.dispose(); }
+    _turmas.clear();
+
+    if (d.turmas.isNotEmpty) {
+      for (var t in d.turmas) {
+        var turmaData = TurmaInputData(onUpdate: _atualizarTela);
+        turmaData.codigoCtrl.text = t.codigo;
+        
+        // Professores
+        turmaData.professores.clear();
+        for (var p in t.professores) {
+          var profData = ProfessorInputData(onUpdate: _atualizarTela);
+          profData.nomeCtrl.text = p;
+          profData.iniciarListeners(); // 🟢 Ativa o ouvinte
+          turmaData.professores.add(profData);
+        }
+        if (turmaData.professores.isEmpty) {
+          var pData = ProfessorInputData(onUpdate: _atualizarTela);
+          pData.iniciarListeners();
+          turmaData.professores.add(pData);
+        }
+
+        // Horários e EPIs
+        turmaData.horarios.clear();
+        for (var h in t.horarios) {
+          var horData = HorarioInputData(onUpdate: _atualizarTela);
+          horData.diaCtrl.text = h.dia;
+          horData.inicioCtrl.text = h.inicio;
+          horData.fimCtrl.text = h.fim;
+          horData.salaCtrl.text = h.local;
+          horData.isLaboratorio = h.isLaboratorio;
+          horData.frequenciaLab = h.frequenciaLab;
+          horData.precisaEpi = h.precisaEpi;
+          
+          horData.datasSelecionadas = h.datasCustomizadas.map((dateStr) {
+            var parts = dateStr.split('-');
+            if(parts.length == 3) return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+            return DateTime.now();
+          }).toSet();
+
+          horData.epis.clear();
+          for (var epi in h.epis) {
+            horData.epis.add(EpiData(epi, true, isCustom: !['JALECO', 'CALÇA COMPRIDA', 'ÓCULOS DE PROTEÇÃO'].contains(epi)));
+          }
+          for (var def in ['JALECO', 'CALÇA COMPRIDA', 'ÓCULOS DE PROTEÇÃO']) {
+            if (!h.epis.contains(def)) horData.epis.add(EpiData(def, false));
+          }
+          
+          horData.iniciarListeners(); // 🟢 Ativa o ouvinte
+          turmaData.horarios.add(horData);
+        }
+        if (turmaData.horarios.isEmpty) {
+          var hData = HorarioInputData(onUpdate: _atualizarTela);
+          hData.iniciarListeners();
+          turmaData.horarios.add(hData);
+        }
+
+        turmaData.iniciarListeners(); // 🟢 Ativa o ouvinte
+        _turmas.add(turmaData);
+      }
+    } else {
       var turmaMestra = TurmaInputData(onUpdate: _atualizarTela);
       turmaMestra.iniciarListeners();
       _turmas.add(turmaMestra);
+    }
+  }
+
+  void _resetarTudo() {
+    setState(() {
+      if (widget.disciplinaParaEditar != null) {
+        // 🟢 MODO EDIÇÃO: Restaura todos os dados originais
+        _carregarDadosIniciais();
+      } else {
+        // 🟢 MODO CRIAÇÃO: Limpa todos os campos para branco
+        _codigoController.clear(); _nomeController.clear(); _institutoController.clear();
+        _departamentoController.clear(); _ementaController.clear(); _formulaController.clear(); 
+        _avisosController.clear();
+        
+        _inicioDataCtrl.clear(); _fimDataCtrl.clear();
+        _selecionouInicio = false; _selecionouFim = false; _tapStep = 2;
+
+        _isQuadrimestral = false; _isEstagio = false; _contaPresenca = true;
+        _isDeptExpanded = false; _isInstitutoExpanded = false; 
+        
+        _isAddingAvaliacao = false;
+        _avaliacoes = [AvaliacaoData('P1', true), AvaliacaoData('P2', false), AvaliacaoData('T1', false)];
+        
+        for (var t in _turmas) { t.dispose(); }
+        _turmas.clear();
+        var turmaMestra = TurmaInputData(onUpdate: _atualizarTela);
+        turmaMestra.iniciarListeners();
+        _turmas.add(turmaMestra);
+      }
     });
   }
 
@@ -235,10 +357,23 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     }
   }
 
+  // 🟢 Variáveis para guardar o estado anterior
+  String _codigoAnterior = '';
+  String _nomeAnterior = '';
+  String _dataEdicaoAnterior = '27/08/2026'; // Exemplo de formatação da data
+
   @override
   void initState() {
     super.initState();
-    _turmas.add(TurmaInputData(onUpdate: _atualizarTela));
+    
+    // 🟢 PRÉ-CARREGAMENTO
+    if (widget.disciplinaParaEditar != null) {
+      _carregarDadosIniciais();
+    } else {
+      var turmaMestra = TurmaInputData(onUpdate: _atualizarTela);
+      turmaMestra.iniciarListeners();
+      _turmas.add(turmaMestra);
+    }
 
     _inicioDataFocus.addListener(() { if (!_inicioDataFocus.hasFocus) _parseDataManual(_inicioDataCtrl, true); });
     _fimDataFocus.addListener(() { if (!_fimDataFocus.hasFocus) _parseDataManual(_fimDataCtrl, false); });
@@ -289,7 +424,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   }
 
   // =========================================================================
-  // 🚀 MOTOR DE SALVAMENTO (UI -> FIREBASE)
+  // 🚀 MOTOR DE SALVAMENTO INTELIGENTE (UI -> FIREBASE)
   // =========================================================================
   Future<void> _salvarDisciplina() async {
     if (_codigoController.text.trim().isEmpty || _nomeController.text.trim().isEmpty) {
@@ -300,7 +435,9 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     setState(() => _isLoadingSave = true);
 
     try {
+      bool isModoEdicao = widget.disciplinaParaEditar != null;
       List<Turma> turmasMapeadas = [];
+      
       for (int i = 0; i < _turmas.length; i++) {
         var turmaData = _turmas[i];
         List<HorarioAula> horariosMapeados = turmaData.horarios.map((horData) {
@@ -317,16 +454,25 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
           );
         }).toList();
 
+        String codigoDaDisciplina = _codigoController.text.trim().toUpperCase();
+        String codigoDaTurma = turmaData.codigoCtrl.text.trim().isEmpty ? 'T0${i+1}' : turmaData.codigoCtrl.text.trim();
+
+        // 🟢 BLINDAGEM DE MATRÍCULA: Mantém o ID original da turma para não desconectar os alunos!
+        String turmaIdFinal = '${codigoDaDisciplina}_$codigoDaTurma';
+        if (isModoEdicao && i < widget.disciplinaParaEditar!.turmas.length) {
+          turmaIdFinal = widget.disciplinaParaEditar!.turmas[i].id;
+        }
+
         turmasMapeadas.add(Turma(
-          id: 'T${DateTime.now().millisecondsSinceEpoch}$i',
-          codigo: turmaData.codigoCtrl.text.trim().isEmpty ? 'T0${i+1}' : turmaData.codigoCtrl.text.trim(),
+          id: turmaIdFinal,
+          codigo: codigoDaTurma,
           professores: turmaData.professores.map((p) => p.nomeCtrl.text.trim()).where((nome) => nome.isNotEmpty).toList(),
           horarios: horariosMapeados,
         ));
       }
 
       final novaDisciplina = Disciplina(
-        id: '',
+        id: isModoEdicao ? widget.disciplinaParaEditar!.id : '', // 🟢 USA O ID EXISTENTE SE FOR EDIÇÃO
         codigo: _codigoController.text.trim().toUpperCase(),
         nome: _nomeController.text.trim().toUpperCase(),
         instituto: _institutoController.text.trim(),
@@ -339,19 +485,42 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
         formulaFinal: _formulaController.text.trim(),
         avisosGerais: _avisosController.text.trim(),
         turmas: turmasMapeadas,
-        cor: const Color(0xFF0460E9), 
-        isVerificada: false, 
-        numeroInscritos: 0,
+        cor: Disciplina.obterPaleta(_departamentoController.text.trim()).fundoInicio, 
+        isVerificada: true, 
+        numeroInscritos: widget.disciplinaParaEditar?.numeroInscritos ?? 0, // Mantém os alunos inscritos intactos
         dataInicio: Timestamp.fromDate(_selecionouInicio ? _dataInicio : DateTime.now()),
         dataFim: Timestamp.fromDate(_selecionouFim ? _dataFim : DateTime.now().add(const Duration(days: 120))),
         totalAulasEstimadas: 30,
+        dataEdicao: Timestamp.now(), // 🟢 CARIMBA A DATA DA EDIÇÃO!
       );
 
-      await FirestoreService().createDisciplinaGlobal(novaDisciplina);
+      final user = context.read<UserProvider>().currentUser;
+      final bool isRepresentante = (user?.isRC ?? false) && !(user?.isGremio ?? false);
+
+      if (isModoEdicao) {
+         if (isRepresentante) {
+             // 🟢 REPRESENTANTE: Envia para a coleção de sugestões
+             await FirebaseFirestore.instance.collection('sugestoes_edicao').add({
+                 ...novaDisciplina.toMap(),
+                 'disciplinaOriginalId': novaDisciplina.id,
+                 'sugeridoPor': user?.uid,
+                 'status': 'em_analise',
+                 'dataSugestao': Timestamp.now(),
+             });
+             if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sugestão enviada para análise do Grêmio!'), backgroundColor: Colors.orange));
+         } else {
+             // 🟢 GRÊMIO/ADMIN: Atualiza o documento original no Firebase!
+             await FirebaseFirestore.instance.collection('disciplinas').doc(novaDisciplina.id).update(novaDisciplina.toMap());
+             if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Edições salvas e atualizadas para todos os alunos!'), backgroundColor: Colors.green));
+         }
+      } else {
+         // 🟢 CRIAÇÃO NOVA
+         await FirestoreService().createDisciplinaGlobal(novaDisciplina);
+         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina criada e enviada ao Hub!'), backgroundColor: Colors.green));
+      }
 
       if (mounted) {
         FocusScope.of(context).unfocus(); 
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina criada e enviada ao Hub com sucesso!'), backgroundColor: Colors.green));
         Navigator.of(context).pop(); 
       }
     } catch (e) {
@@ -527,64 +696,119 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   // =========================================================================
 
   Widget _buildSectionInformacoesGerais() {
+    List<Widget> alteracoesGerais = [];
+    bool isModoEdicao = widget.disciplinaParaEditar != null;
+    final dOriginal = widget.disciplinaParaEditar;
+    
+    bool codigoModificado = isModoEdicao && _codigoController.text.trim().toUpperCase() != dOriginal!.codigo.trim().toUpperCase();
+    bool nomeModificado = isModoEdicao && _nomeController.text.trim().toUpperCase() != dOriginal!.nome.trim().toUpperCase();
+    bool instModificado = isModoEdicao && _institutoController.text.trim().toUpperCase() != dOriginal!.instituto.trim().toUpperCase();
+    bool deptModificado = isModoEdicao && _departamentoController.text.trim().toUpperCase() != dOriginal!.departamento.trim().toUpperCase();
+    bool ementaModificada = isModoEdicao && _ementaController.text.trim() != dOriginal!.ementa.trim();
+    bool quadModificado = isModoEdicao && _isQuadrimestral != dOriginal!.isQuadrimestral;
+
+    if (codigoModificado) alteracoesGerais.add(_buildAltText('CÓDIGO: ${dOriginal!.codigo}'));
+    if (nomeModificado) alteracoesGerais.add(_buildAltText('NOME: ${dOriginal!.nome}'));
+    if (instModificado) alteracoesGerais.add(_buildAltText('INSTITUTO: ${dOriginal!.instituto}'));
+    if (deptModificado) alteracoesGerais.add(_buildAltText('DEPARTAMENTO: ${dOriginal!.departamento}'));
+    if (ementaModificada) alteracoesGerais.add(_buildAltText('EMENTA ALTERADA'));
+    if (quadModificado) alteracoesGerais.add(_buildAltText(dOriginal!.isQuadrimestral ? 'ERA QUADRIMESTRAL' : 'ERA SEMESTRAL'));
+
+    Widget caixaPrincipal = _buildOutlinedBox(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLabel('CÓDIGO DA DISCIPLINA'),
+          _buildRealTextField(hint: 'EX: GP2601', controller: _codigoController, focusNode: _codigoFocus, nextFocus: _nomeFocus, isModificado: codigoModificado),
+          SizedBox(height: _espacoInputAteProximoTitulo),
+          
+          _buildLabel('NOME DA DISCIPLINA'),
+          _buildRealTextField(hint: 'EX: FENÔMENOS PARANORMAIS', controller: _nomeController, focusNode: _nomeFocus, isModificado: nomeModificado),
+          SizedBox(height: _espacoInputAteProximoTitulo),
+          
+          _buildLabel('INSTITUTO'),
+          _buildInstitutoDropdown(isModificado: instModificado), // 🟢 Agora envia o estado amarelo!
+          SizedBox(height: _espacoInputAteProximoTitulo),
+
+          _buildLabel('DEPARTAMENTO'),
+          _buildDepartamentoDropdown(isModificado: deptModificado), // 🟢 Agora envia o estado amarelo!
+          SizedBox(height: _espacoInputAteProximoTitulo),
+
+          _buildLabel('EMENTA'),
+          _buildRealTextField(hint: 'COPIE E COLE DO JÚPITER', controller: _ementaController, focusNode: _ementaFocus, minLines: 3, maxLines: 5, isModificado: ementaModificada),
+          SizedBox(height: _espacoInputAteToggle),
+
+          Row(
+            children: [
+              _buildToggle(valor: _isQuadrimestral, onChanged: (v) => setState(() => _isQuadrimestral = v)),
+              SizedBox(width: _espacoToggleAteTexto),
+              Transform.translate(offset: Offset(0, _deslocamentoVerticalTextoToggle), child: Text('QUADRIMESTRAL', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel, height: 1.0))),
+            ],
+          ),
+          
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildToggle(valor: _isEstagio, onChanged: (v) => setState(() => _isEstagio = v)),
+              SizedBox(width: _espacoToggleAteTexto),
+              Transform.translate(offset: Offset(0, _deslocamentoVerticalTextoToggle), child: Text('DISCIPLINA DE ESTÁGIO', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel, height: 1.0))),
+            ],
+          )
+        ],
+      ),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle('INFORMAÇÕES GERAIS'),
-        _buildOutlinedBox(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildLabel('CÓDIGO DA DISCIPLINA'),
-              _buildRealTextField(hint: 'EX: GP2601', controller: _codigoController, focusNode: _codigoFocus, nextFocus: _nomeFocus),
-              SizedBox(height: _espacoInputAteProximoTitulo),
-              
-              _buildLabel('NOME DA DISCIPLINA'),
-              _buildRealTextField(hint: 'EX: FENÔMENOS PARANORMAIS', controller: _nomeController, focusNode: _nomeFocus),
-              SizedBox(height: _espacoInputAteProximoTitulo),
-              
-              _buildLabel('INSTITUTO'),
-              _buildInstitutoDropdown(), 
-              SizedBox(height: _espacoInputAteProximoTitulo),
-
-              _buildLabel('DEPARTAMENTO'),
-              _buildDepartamentoDropdown(), 
-              SizedBox(height: _espacoInputAteProximoTitulo),
-
-              _buildLabel('EMENTA'),
-              _buildRealTextField(hint: 'COPIE E COLE DO JÚPITER', controller: _ementaController, focusNode: _ementaFocus, minLines: 3, maxLines: 5),
-              SizedBox(height: _espacoInputAteToggle),
-
-              Row(
-                children: [
-                  _buildToggle(valor: _isQuadrimestral, onChanged: (v) => setState(() => _isQuadrimestral = v)),
-                  SizedBox(width: _espacoToggleAteTexto),
-                  Transform.translate(
-                    offset: Offset(0, _deslocamentoVerticalTextoToggle),
-                    child: Text('QUADRIMESTRAL', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel, height: 1.0)),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  _buildToggle(valor: _isEstagio, onChanged: (v) => setState(() => _isEstagio = v)),
-                  SizedBox(width: _espacoToggleAteTexto),
-                  Transform.translate(
-                    offset: Offset(0, _deslocamentoVerticalTextoToggle),
-                    child: Text('DISCIPLINA DE ESTÁGIO', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel, height: 1.0)),
-                  ),
-                ],
-              )
-            ],
-          ),
-        ),
+        _wrapWithHistory(caixaPrincipal, alteracoesGerais),
       ],
     );
   }
 
   Widget _buildSectionTurmasHorarios() {
+    bool isModoEdicao = widget.disciplinaParaEditar != null;
+    final dOriginal = widget.disciplinaParaEditar;
+
+    List<Widget> altPeriodo = [];
+    bool inicioModificado = false;
+    bool fimModificado = false;
+
+    if (isModoEdicao) {
+      String dataOrigInicio = DateFormat('dd/MM/yy').format(dOriginal!.dataInicio.toDate());
+      String dataOrigFim = DateFormat('dd/MM/yy').format(dOriginal.dataFim.toDate());
+      inicioModificado = _inicioDataCtrl.text.trim() != dataOrigInicio;
+      fimModificado = _fimDataCtrl.text.trim() != dataOrigFim;
+      if (inicioModificado) altPeriodo.add(_buildAltText('INÍCIO: $dataOrigInicio'));
+      if (fimModificado) altPeriodo.add(_buildAltText('FIM: $dataOrigFim'));
+    }
+
+    Widget caixaPeriodo = _buildOutlinedBox(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: _buildRealTextField(hint: 'INÍCIO', controller: _inicioDataCtrl, focusNode: _inicioDataFocus, alignCenter: true, keyboardType: TextInputType.number, inputFormatters: [DateTextFormatter()], isModificado: inicioModificado, onChanged: (_) => _atualizarTela())),
+              const SizedBox(width: 8),
+              Expanded(child: _buildRealTextField(hint: 'FINAL', controller: _fimDataCtrl, focusNode: _fimDataFocus, alignCenter: true, keyboardType: TextInputType.number, inputFormatters: [DateTextFormatter()], isModificado: fimModificado, onChanged: (_) => _atualizarTela())),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () { FocusScope.of(context).unfocus(); setState(() => _isCalendarExpanded = !_isCalendarExpanded); },
+                child: AnimatedContainer(duration: const Duration(milliseconds: 200), height: 47, width: 47, decoration: BoxDecoration(color: _isCalendarExpanded ? _corDestaque : _corFundoInput, border: Border.all(color: _isCalendarExpanded ? _corDestaque : _corBordaInativa, width: 1.5), borderRadius: BorderRadius.circular(6.7)), child: Icon(Icons.calendar_month_rounded, color: _isCalendarExpanded ? Colors.white : _corLabel)),
+              ),
+            ],
+          ),
+          AnimatedCrossFade(duration: const Duration(milliseconds: 300), crossFadeState: _isCalendarExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst, firstChild: const SizedBox(width: double.infinity, height: 0), secondChild: Padding(padding: const EdgeInsets.only(top: 12.0), child: _buildMiniCalendar())),
+        ],
+      ),
+    );
+
+    int totalTurmasNoLayout = _turmas.length;
+    if (isModoEdicao && dOriginal!.turmas.length > _turmas.length) {
+      totalTurmasNoLayout = dOriginal.turmas.length;
+    }
+
     return Opacity(
       opacity: _isEstagio ? 0.3 : 1.0, 
       child: IgnorePointer(
@@ -592,202 +816,239 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 🟢 CALENDÁRIO COM CÉDULAS DE DIGITAÇÃO INTELIGENTES
             _buildSectionTitle('PERÍODO DA DISCIPLINA'),
-            _buildOutlinedBox(
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildRealTextField(
-                          hint: 'INÍCIO', 
-                          controller: _inicioDataCtrl, 
-                          focusNode: _inicioDataFocus, 
-                          alignCenter: true, 
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [DateTextFormatter()]
-                        )
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildRealTextField(
-                          hint: 'FINAL', 
-                          controller: _fimDataCtrl, 
-                          focusNode: _fimDataFocus, 
-                          alignCenter: true, 
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [DateTextFormatter()]
-                        )
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () {
-                          FocusScope.of(context).unfocus();
-                          setState(() => _isCalendarExpanded = !_isCalendarExpanded);
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          height: 47, width: 47,
-                          decoration: BoxDecoration(
-                            color: _isCalendarExpanded ? _corDestaque : _corFundoInput,
-                            border: Border.all(color: _isCalendarExpanded ? _corDestaque : _corBordaInativa, width: 1.5),
-                            borderRadius: BorderRadius.circular(6.7),
-                          ),
-                          child: Icon(Icons.calendar_month_rounded, color: _isCalendarExpanded ? Colors.white : _corLabel),
-                        ),
-                      ),
-                    ],
-                  ),
-                  AnimatedCrossFade(
-                    duration: const Duration(milliseconds: 300),
-                    crossFadeState: _isCalendarExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                    firstChild: const SizedBox(width: double.infinity, height: 0),
-                    secondChild: Padding(
-                      padding: const EdgeInsets.only(top: 12.0),
-                      child: _buildMiniCalendar(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _wrapWithHistory(caixaPeriodo, altPeriodo),
             SizedBox(height: _espacoEntreSecoes),
 
             _buildSectionTitle('TURMAS & HORÁRIOS', marginBottom: _espacoSecaoAteCaixa), 
             
-            ..._turmas.asMap().entries.map((entry) {
-              int indexTurma = entry.key;
-              TurmaInputData turma = entry.value;
-              bool isLast = indexTurma == _turmas.length - 1; 
+            ...List.generate(totalTurmasNoLayout, (indexTurma) {
+              bool isLast = indexTurma == totalTurmasNoLayout - 1; 
+
+              if (isModoEdicao && indexTurma >= _turmas.length) {
+                Turma tExcluida = dOriginal!.turmas[indexTurma];
+                return Padding(
+                  padding: EdgeInsets.only(bottom: isLast ? 0.0 : _espacoEntreSecoes),
+                  child: Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.only(top: 26, bottom: 16, left: 16, right: 16),
+                    decoration: BoxDecoration(color: const Color(0xFFBABBBB), borderRadius: BorderRadius.circular(6.0), border: Border.all(color: const Color(0xFF969AA0), width: 1.5)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('TURMA EXCLUÍDA', style: TextStyle(fontFamily: 'LeagueSpartan', fontSize: 18.0, fontWeight: FontWeight.w800, color: Color(0xFF737576))),
+                        SizedBox(height: _espacoTituloAbaAteData),
+                        Text(DateFormat('dd/MM/yyyy').format(DateTime.now()), style: const TextStyle(fontFamily: 'Lato', fontStyle: FontStyle.italic, fontSize: 14.0, fontWeight: FontWeight.w800, color: Color(0xFFF0F0F0))),
+                        SizedBox(height: _espacoDataAbaAteTexto),
+                        _buildAltText('TURMA: ${tExcluida.codigo}', tachado: true),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              TurmaInputData turma = _turmas[indexTurma];
+              bool isNovaTurmaNaEdicao = isModoEdicao && indexTurma >= dOriginal!.turmas.length;
+              
+              List<Widget> altTurma = [];
+              Turma? tOriginal;
+              bool turmaCodigoModificado = false;
+
+              if (isNovaTurmaNaEdicao) {
+                altTurma.add(_buildAltText('CRIADA NESTA EDIÇÃO'));
+              } else if (isModoEdicao) {
+                tOriginal = dOriginal!.turmas[indexTurma];
+                
+                turmaCodigoModificado = turma.codigoCtrl.text.trim() != tOriginal.codigo;
+                if (turmaCodigoModificado) altTurma.add(_buildAltText('CÓDIGO: ${tOriginal.codigo}'));
+
+                int maxProfs = turma.professores.length > tOriginal.professores.length ? turma.professores.length : tOriginal.professores.length;
+                for (int p = 0; p < maxProfs; p++) {
+                  if (p >= turma.professores.length) {
+                    altTurma.add(_buildAltText('PROFESSOR EXCLUÍDO: ${tOriginal.professores[p]}'));
+                  } else if (p >= tOriginal.professores.length) {
+                    if (turma.professores[p].nomeCtrl.text.trim().isNotEmpty) {
+                      altTurma.add(_buildAltText('PROFESSOR ADICIONADO: ${turma.professores[p].nomeCtrl.text.trim()}', tachado: true));
+                    }
+                  } else {
+                    if (turma.professores[p].nomeCtrl.text.trim().toUpperCase() != tOriginal.professores[p].toUpperCase()) {
+                      altTurma.add(_buildAltText('PROFESSOR EDITADO: ERA ${tOriginal.professores[p]}'));
+                    }
+                  }
+                }
+
+                int maxHorarios = turma.horarios.length > tOriginal.horarios.length ? turma.horarios.length : tOriginal.horarios.length;
+                for (int h = 0; h < maxHorarios; h++) {
+                  if (h >= turma.horarios.length) {
+                    altTurma.add(_buildAltText('HORÁRIO EXCLUÍDO: ${tOriginal.horarios[h].dia} ${tOriginal.horarios[h].inicio}-${tOriginal.horarios[h].fim}'));
+                  } else if (h >= tOriginal.horarios.length) {
+                    var horAtual = turma.horarios[h];
+                    altTurma.add(_buildAltText('HORÁRIO ADICIONADO: ${horAtual.diaCtrl.text} ${horAtual.inicioCtrl.text}-${horAtual.fimCtrl.text}', tachado: true));
+                    
+                    if (horAtual.salaCtrl.text.trim().isNotEmpty) {
+                      altTurma.add(_buildAltText('LOCAL ADICIONADO: ${horAtual.salaCtrl.text.trim()}', tachado: true));
+                    }
+                    if (horAtual.isLaboratorio) {
+                      altTurma.add(_buildAltText('LABORATÓRIO ADICIONADO', tachado: true));
+                    }
+                    // Varre os EPIs de um horário NOVO
+                    List<String> epiAtual = (horAtual.isLaboratorio && horAtual.precisaEpi) ? horAtual.epis.where((e) => e.ativo).map((e) => e.nome).toList() : [];
+                    for (var epi in epiAtual) {
+                      altTurma.add(_buildAltText('EPI ADICIONADO: $epi', tachado: true));
+                    }
+
+                  } else {
+                    var horAtual = turma.horarios[h];
+                    var horAntigo = tOriginal.horarios[h];
+
+                    bool changedHora = horAtual.diaCtrl.text != horAntigo.dia || horAtual.inicioCtrl.text != horAntigo.inicio || horAtual.fimCtrl.text != horAntigo.fim;
+                    if (changedHora) altTurma.add(_buildAltText('HORÁRIO EDITADO: ERA ${horAntigo.dia} ${horAntigo.inicio}-${horAntigo.fim}'));
+
+                    if (horAtual.salaCtrl.text.trim() != horAntigo.local) altTurma.add(_buildAltText('LOCAL EDITADO: ERA ${horAntigo.local}'));
+
+                    if (horAtual.isLaboratorio != horAntigo.isLaboratorio) {
+                      altTurma.add(_buildAltText(horAntigo.isLaboratorio ? 'ERA LABORATÓRIO' : 'NÃO ERA LABORATÓRIO'));
+                    }
+                    if (horAtual.isLaboratorio && (horAtual.precisaEpi != horAntigo.precisaEpi)) {
+                      altTurma.add(_buildAltText(horAntigo.precisaEpi ? 'EXIGIA EPI' : 'NÃO EXIGIA EPI'));
+                    }
+
+                    List<String> epiAtual = (horAtual.isLaboratorio && horAtual.precisaEpi) ? horAtual.epis.where((e) => e.ativo).map((e) => e.nome).toList() : [];
+                    List<String> epiAntigo = (horAntigo.isLaboratorio && horAntigo.precisaEpi) ? horAntigo.epis : [];
+                    
+                    for (var ea in epiAntigo) {
+                      if (!epiAtual.contains(ea)) altTurma.add(_buildAltText('EPI REMOVIDO: $ea'));
+                    }
+                    for (var en in epiAtual) {
+                      if (!epiAntigo.contains(en)) altTurma.add(_buildAltText('EPI ADICIONADO: $en', tachado: true));
+                    }
+                  }
+                }
+              }
+
+              Color corBordaTurma = isNovaTurmaNaEdicao ? const Color(0xFF969AA0) : _corDestaque;
+
+              Widget caixaTurma = _buildOutlinedBox(
+                corBordaPersonalizada: corBordaTurma, 
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(turma.getDisplayTitle(indexTurma), style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w800, fontSize: 16, color: _corLabel)),
+                            Text('${turma.professores.length} PROFESSORES ~ ${turma.horarios.length} HORÁRIOS', style: TextStyle(fontFamily: 'Lato', fontSize: 12, color: _corDicaInput)),
+                          ],
+                        ),
+                        if (_turmas.length > 1)
+                          GestureDetector(
+                            onTap: () { setState(() { turma.dispose(); _turmas.removeAt(indexTurma); }); },
+                            child: Image.asset('assets/images/x_icon.png', width: _tamanhoIconeX, height: _tamanhoIconeX, color: _corDicaInput),
+                          ),
+                      ],
+                    ),
+                    SizedBox(height: _espacoInputAteProximoTitulo),
+
+                    _buildLabel('CÓDIGO DE TURMA'),
+                    _buildRealTextField(
+                      hint: 'EX: 2026101', controller: turma.codigoCtrl, focusNode: turma.codigoFocus, 
+                      nextFocus: turma.professores.isNotEmpty ? turma.professores.first.nomeFocus : null, 
+                      isModificado: turmaCodigoModificado,
+                      onChanged: (_) => _atualizarTela()
+                    ), 
+                    SizedBox(height: _espacoInputAteProximoTitulo),
+
+                    _buildLabel('PROFESSOR'),
+                    ...turma.professores.asMap().entries.map((eProf) {
+                      int pIndex = eProf.key;
+                      ProfessorInputData prof = eProf.value;
+                      FocusNode? nextFocus = (pIndex < turma.professores.length - 1) ? turma.professores[pIndex + 1].nomeFocus : (turma.horarios.isNotEmpty ? turma.horarios.first.salaFocus : null);
+
+                      bool isProfNovo = isModoEdicao && tOriginal != null && pIndex >= tOriginal.professores.length;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          children: [
+                            // 🟢 ADICIONADO ONCHANGED
+                            Expanded(child: _buildRealTextField(hint: 'NOME DO PROFESSOR', controller: prof.nomeCtrl, focusNode: prof.nomeFocus, nextFocus: nextFocus, isModificado: isProfNovo, onChanged: (_) => _atualizarTela())),
+                            if (turma.professores.length > 1) ...[
+                              SizedBox(width: _espacoLixeiraCaixa),
+                              GestureDetector(
+                                onTap: () => setState(() { prof.dispose(); turma.professores.removeAt(pIndex); }),
+                                child: Image.asset('assets/images/lixeira_icon.png', width: _tamanhoIconeLixeira, height: _tamanhoIconeLixeira, color: _corLixeira),
+                              )
+                            ]
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    _buildNovoBotaoAcao('+ ADD', () => setState(() { var novoProf = ProfessorInputData(onUpdate: _atualizarTela); novoProf.iniciarListeners(); turma.professores.add(novoProf); })),
+                    SizedBox(height: _espacoInputAteProximoTitulo),
+
+                    _buildLabel('HORÁRIOS & LOCAIS'),
+                    ...turma.horarios.asMap().entries.map((eHor) {
+                      int hIndex = eHor.key;
+                      HorarioInputData hor = eHor.value;
+                      
+                      bool salaModificada = false;
+                      if (tOriginal != null && hIndex < tOriginal.horarios.length) {
+                        salaModificada = hor.salaCtrl.text.trim() != tOriginal.horarios[hIndex].local;
+                      }
+
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: _espacoLocalAteAdd),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(child: _buildDiaCasinoWidget(hor)), const SizedBox(width: 8),
+                                Expanded(child: _buildTimeCasinoWidget(hor, false)), const SizedBox(width: 8),
+                                Expanded(child: _buildTimeCasinoWidget(hor, true)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                // 🟢 ADICIONADO ONCHANGED
+                                Expanded(child: _buildRealTextField(hint: 'SALA / LOCAL', controller: hor.salaCtrl, focusNode: hor.salaFocus, isModificado: salaModificada, onChanged: (_) => _atualizarTela())),
+                                if (turma.horarios.length > 1) ...[
+                                  SizedBox(width: _espacoLixeiraCaixa),
+                                  GestureDetector(
+                                    onTap: () => setState(() { hor.dispose(); turma.horarios.removeAt(hIndex); }),
+                                    child: Image.asset('assets/images/lixeira_icon.png', width: _tamanhoIconeLixeira, height: _tamanhoIconeLixeira, color: _corLixeira),
+                                  )
+                                ]
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    _buildNovoBotaoAcao('+ ADD', () => setState(() { var novoHor = HorarioInputData(onUpdate: _atualizarTela); novoHor.iniciarListeners(); turma.horarios.add(novoHor); })),
+                    
+                    if (isLast) ...[
+                      SizedBox(height: _espacoInputAteProximoTitulo),
+                      _buildNovoBotaoAcao('+ CRIAR NOVA TURMA', () => setState(() { var novaTurma = TurmaInputData(onUpdate: _atualizarTela); novaTurma.iniciarListeners(); _turmas.add(novaTurma); }), expandir: true),
+                    ]
+                  ],
+                ),
+              );
 
               return Padding(
                 padding: EdgeInsets.only(bottom: isLast ? 0.0 : _espacoEntreSecoes),
-                child: _buildOutlinedBox(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(turma.getDisplayTitle(indexTurma), style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w800, fontSize: 16, color: _corLabel)),
-                              Text('${turma.professores.length} PROFESSORES ~ ${turma.horarios.length} HORÁRIOS', style: TextStyle(fontFamily: 'Lato', fontSize: 12, color: _corDicaInput)),
-                            ],
-                          ),
-                          if (_turmas.length > 1)
-                            GestureDetector(
-                              onTap: () {
-                                setState(() { turma.dispose(); _turmas.removeAt(indexTurma); });
-                              },
-                              child: Image.asset('assets/images/x_icon.png', width: _tamanhoIconeX, height: _tamanhoIconeX, color: _corDicaInput),
-                            ),
-                        ],
-                      ),
-                      SizedBox(height: _espacoInputAteProximoTitulo),
-
-                      _buildLabel('CÓDIGO DE TURMA'),
-                      _buildRealTextField(
-                        hint: 'EX: 2026101', 
-                        controller: turma.codigoCtrl, 
-                        focusNode: turma.codigoFocus, 
-                        nextFocus: turma.professores.isNotEmpty ? turma.professores.first.nomeFocus : null, 
-                        onChanged: (_) => _atualizarTela()
-                      ), 
-                      SizedBox(height: _espacoInputAteProximoTitulo),
-
-                      _buildLabel('PROFESSOR'),
-                      ...turma.professores.asMap().entries.map((eProf) {
-                        int pIndex = eProf.key;
-                        ProfessorInputData prof = eProf.value;
-                        
-                        FocusNode? nextFocus;
-                        if (pIndex < turma.professores.length - 1) {
-                          nextFocus = turma.professores[pIndex + 1].nomeFocus;
-                        } else if (turma.horarios.isNotEmpty) {
-                          nextFocus = turma.horarios.first.salaFocus; 
-                        }
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: Row(
-                            children: [
-                              Expanded(child: _buildRealTextField(hint: 'NOME DO PROFESSOR', controller: prof.nomeCtrl, focusNode: prof.nomeFocus, nextFocus: nextFocus)),
-                              if (turma.professores.length > 1) ...[
-                                SizedBox(width: _espacoLixeiraCaixa),
-                                GestureDetector(
-                                  onTap: () => setState(() { prof.dispose(); turma.professores.removeAt(pIndex); }),
-                                  child: Image.asset('assets/images/lixeira_icon.png', width: _tamanhoIconeLixeira, height: _tamanhoIconeLixeira, color: _corLixeira),
-                                )
-                              ]
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      _buildNovoBotaoAcao('+ ADD', () => setState(() {
-                        var novoProf = ProfessorInputData(onUpdate: _atualizarTela);
-                        novoProf.iniciarListeners(); 
-                        turma.professores.add(novoProf);
-                      })),
-                      SizedBox(height: _espacoInputAteProximoTitulo),
-
-                      _buildLabel('HORÁRIOS & LOCAIS'),
-                      ...turma.horarios.asMap().entries.map((eHor) {
-                        int hIndex = eHor.key;
-                        HorarioInputData hor = eHor.value;
-                        return Padding(
-                          padding: EdgeInsets.only(bottom: _espacoLocalAteAdd),
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(child: _buildDiaCasinoWidget(hor)),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: _buildTimeCasinoWidget(hor, false)),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: _buildTimeCasinoWidget(hor, true)),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Expanded(child: _buildRealTextField(hint: 'SALA / LOCAL', controller: hor.salaCtrl, focusNode: hor.salaFocus)),
-                                  if (turma.horarios.length > 1) ...[
-                                    SizedBox(width: _espacoLixeiraCaixa),
-                                    GestureDetector(
-                                      onTap: () => setState(() { hor.dispose(); turma.horarios.removeAt(hIndex); }),
-                                      child: Image.asset('assets/images/lixeira_icon.png', width: _tamanhoIconeLixeira, height: _tamanhoIconeLixeira, color: _corLixeira),
-                                    )
-                                  ]
-                                ],
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      _buildNovoBotaoAcao('+ ADD', () => setState(() {
-                        var novoHor = HorarioInputData(onUpdate: _atualizarTela);
-                        novoHor.iniciarListeners(); 
-                        turma.horarios.add(novoHor);
-                      })),
-                      
-                      // 🟢 BOTÃO GERENCIAR EXCEÇÕES FOI TOTALMENTE REMOVIDO DAQUI
-                      
-                      if (isLast) ...[
-                        SizedBox(height: _espacoInputAteProximoTitulo),
-                        _buildNovoBotaoAcao('+ CRIAR NOVA TURMA', () => setState(() {
-                          var novaTurma = TurmaInputData(onUpdate: _atualizarTela);
-                          novaTurma.iniciarListeners(); 
-                          _turmas.add(novaTurma);
-                        }), expandir: true),
-                      ]
-                    ],
-                  ),
+                child: _wrapWithHistory(
+                  caixaTurma, 
+                  altTurma, 
+                  tituloAba: isNovaTurmaNaEdicao ? 'NOVA TURMA (RASCUNHO)' : 'ANTERIORMENTE',
+                  dataPersonalizada: isNovaTurmaNaEdicao ? DateTime.now() : null 
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),
@@ -795,6 +1056,209 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   }
 
   Widget _buildSectionLogisticaLaboratorio() {
+    List<Widget> altLogistica = [];
+    bool isModoEdicao = widget.disciplinaParaEditar != null;
+    final dOriginal = widget.disciplinaParaEditar;
+
+    if (isModoEdicao) {
+      if (_contaPresenca != dOriginal!.contaPresenca) {
+        altLogistica.add(_buildAltText(dOriginal.contaPresenca ? 'TINHA CHAMADA (PRESENÇA)' : 'NÃO TINHA CHAMADA (PRESENÇA)'));
+      }
+      
+      // Analisando se alguma turma mudou o status de laboratorio
+      bool labMudou = false;
+      for (int i = 0; i < _turmas.length; i++) {
+        if (i < dOriginal.turmas.length) {
+          for (int j = 0; j < _turmas[i].horarios.length; j++) {
+            if (j < dOriginal.turmas[i].horarios.length) {
+              if (_turmas[i].horarios[j].isLaboratorio != dOriginal.turmas[i].horarios[j].isLaboratorio) labMudou = true;
+            }
+          }
+        }
+      }
+      if (labMudou) altLogistica.add(_buildAltText('STATUS DE LABORATÓRIO ALTERADO'));
+    }
+
+    Widget caixaLogistica = Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(_raioBordaCaixaPrincipal),
+          topRight: Radius.circular(_raioBordaCaixaPrincipal),
+          bottomLeft: Radius.circular(altLogistica.isNotEmpty ? 0 : _raioBordaCaixaPrincipal),
+          bottomRight: Radius.circular(altLogistica.isNotEmpty ? 0 : _raioBordaCaixaPrincipal),
+        ),
+        border: Border.all(color: _corDestaque, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(top: _paddingTopCaixaPrincipal, left: _paddingLateralCaixaPrincipal, right: _paddingLateralCaixaPrincipal, bottom: _paddingBottomCaixaPrincipal),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildLabel('CONTA PRESENÇA', marginBottom: 2),
+                    Text('O MEC EXIGE 70% DE PRESENÇA', style: TextStyle(fontFamily: 'Lato', fontSize: 11, color: _corDicaInput)),
+                  ],
+                ),
+                _buildToggle(valor: _contaPresenca, onChanged: (v) => setState(() => _contaPresenca = v)),
+              ],
+            ),
+          ),
+
+          Container(height: 1.5, color: _corDestaque, width: double.infinity),
+          
+          Padding(
+            padding: EdgeInsets.only(top: _paddingTopCaixaPrincipal, left: _paddingLateralCaixaPrincipal, right: _paddingLateralCaixaPrincipal, bottom: _paddingBottomCaixaPrincipal),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildLabel('CONFIGURAÇÕES DE LABORATÓRIO', marginBottom: 2),
+                Text('SELECIONE ABAIXO QUAIS DIAS SÃO DE\nLABORATÓRIO E O QUE PRECISA LEVAR', style: TextStyle(fontFamily: 'Lato', fontSize: 11, color: _corDicaInput, height: 1.2)),
+                SizedBox(height: _espacoInputAteProximoTitulo),
+
+                ..._turmas.asMap().entries.map((entry) {
+                  int tIndex = entry.key;
+                  TurmaInputData turma = entry.value;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InkWell(
+                        onTap: () => setState(() => turma.isLogisticaExpanded = !turma.isLogisticaExpanded),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: Row(
+                            children: [
+                              Transform.rotate(angle: turma.isLogisticaExpanded ? 3.14159 : 0, child: Image.asset('assets/images/seta_icon.png', width: _tamanhoIconeSeta, height: _tamanhoIconeSeta, color: _corLabel)),
+                              SizedBox(width: _espacoSetaTexto),
+                              Text(turma.getDisplayTitle(tIndex), style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w800, fontSize: _tamanhoTextoLabel, color: _corLabel)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      AnimatedCrossFade(
+                        duration: const Duration(milliseconds: 300),
+                        crossFadeState: turma.isLogisticaExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                        firstChild: const SizedBox(width: double.infinity, height: 0),
+                        secondChild: SizedBox(
+                          width: double.infinity,
+                          child: Column(
+                            children: turma.horarios.map((hor) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0, top: 8.0),
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(color: _corFundoInput, borderRadius: BorderRadius.circular(_raioBordaCaixaPrincipal), border: Border.all(color: _corBordaInativa, width: 1.5)),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start, 
+                                    children: [
+                                      Text('${hor.diaCtrl.text}   ${hor.inicioCtrl.text} - ${hor.fimCtrl.text}', style: const TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF969AA0))),
+                                      const SizedBox(height: 14),
+
+                                      Row(
+                                        children: [
+                                          _buildToggle(valor: hor.isLaboratorio, onChanged: (v) { setState(() { hor.isLaboratorio = v; if (!v) hor.precisaEpi = false; }); }),
+                                          SizedBox(width: _espacoToggleAteTexto),
+                                          Transform.translate(offset: Offset(0, _deslocamentoVerticalTextoToggle), child: Text('É LABORATÓRIO?', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel.withOpacity(hor.isLaboratorio ? 1.0 : 0.5), height: 1.0))),
+                                        ],
+                                      ),
+                                      
+                                      AnimatedCrossFade(
+                                        duration: const Duration(milliseconds: 300), crossFadeState: hor.isLaboratorio ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                                        firstChild: const SizedBox(width: double.infinity, height: 0),
+                                        secondChild: Container(
+                                          width: double.infinity, padding: const EdgeInsets.only(top: 14.0),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              _buildFrequenciaSelector(hor),
+                                              if (hor.frequenciaLab != 3) _buildLabDatesText(hor)
+                                              else
+                                                // Código das bolinhas de data customizadas...
+                                                const SizedBox(),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      
+                                      const SizedBox(height: 14),
+                                      Row(
+                                        children: [
+                                          _buildToggle(valor: hor.precisaEpi, isEnabled: hor.isLaboratorio, onChanged: (v) => setState(() => hor.precisaEpi = v)),
+                                          SizedBox(width: _espacoToggleAteTexto),
+                                          Transform.translate(offset: Offset(0, _deslocamentoVerticalTextoToggle), child: Text('PRECISA DE EPIS?', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel.withOpacity(hor.isLaboratorio ? (hor.precisaEpi ? 1.0 : 0.5) : 0.3), height: 1.0))),
+                                        ],
+                                      ),
+                                      
+                                      AnimatedCrossFade(
+                                        duration: const Duration(milliseconds: 300), crossFadeState: hor.precisaEpi ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                                        firstChild: const SizedBox(width: double.infinity, height: 0),
+                                        secondChild: Container(
+                                          width: double.infinity,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const SizedBox(height: 16),
+                                              Wrap(
+                                                spacing: 8, runSpacing: 8,
+                                                children: [
+                                                  ...hor.epis.map((epi) {
+                                                    return GestureDetector(
+                                                      onTap: () { setState(() { if (epi.isCustom && epi.ativo) { hor.epis.remove(epi); } else { epi.ativo = !epi.ativo; } }); },
+                                                      child: _buildEpiChip(epi.nome, ativo: epi.ativo),
+                                                    );
+                                                  }).toList(),
+
+                                                  if (hor.isAddingEpi)
+                                                    Container(
+                                                      height: _alturaBotoes, width: _larguraCaixaEpiNova, 
+                                                      decoration: BoxDecoration(color: _corFundoInput, border: Border.all(color: const Color(0xFF0085FF), width: 1.7), borderRadius: BorderRadius.circular(6.7)),
+                                                      alignment: Alignment.center,
+                                                      child: TextField(
+                                                        controller: hor.newEpiCtrl, focusNode: hor.newEpiFocus, autofocus: true, textAlign: TextAlign.center,
+                                                        inputFormatters: [LengthLimitingTextInputFormatter(20)],
+                                                        style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTextoEpiNovo, color: _corTextoDigitado, letterSpacing: 1.2),
+                                                        cursorColor: _corBordaFocada, cursorWidth: 2.5, cursorHeight: 20, cursorRadius: const Radius.circular(5.0),
+                                                        decoration: InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.only(bottom: _deslocamentoVerticalEpiNovo)),
+                                                        onSubmitted: (_) { hor.newEpiFocus.unfocus(); },
+                                                      ),
+                                                    )
+                                                  else
+                                                    GestureDetector(
+                                                      onTap: () { setState(() => hor.isAddingEpi = true); hor.newEpiFocus.requestFocus(); },
+                                                      child: _buildEpiChip('+ ADD', ativo: false),
+                                                    )
+                                                ],
+                                              )
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      )
+                    ],
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
     return Opacity(
       opacity: _isEstagio ? 0.3 : 1.0, 
       child: IgnorePointer(
@@ -803,403 +1267,174 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildSectionTitle('LOGÍSTICA & LABORATÓRIO'),
-            
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(_raioBordaCaixaPrincipal),
-                border: Border.all(color: _corDestaque, width: 1.5),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: EdgeInsets.only(top: _paddingTopCaixaPrincipal, left: _paddingLateralCaixaPrincipal, right: _paddingLateralCaixaPrincipal, bottom: _paddingBottomCaixaPrincipal),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildLabel('CONTA PRESENÇA', marginBottom: 2),
-                            Text('O MEC EXIGE 70% DE PRESENÇA', style: TextStyle(fontFamily: 'Lato', fontSize: 11, color: _corDicaInput)),
-                          ],
-                        ),
-                        _buildToggle(valor: _contaPresenca, onChanged: (v) => setState(() => _contaPresenca = v)),
-                      ],
-                    ),
-                  ),
-
-                  Container(height: 1.5, color: _corDestaque, width: double.infinity),
-                  
-                  Padding(
-                    padding: EdgeInsets.only(top: _paddingTopCaixaPrincipal, left: _paddingLateralCaixaPrincipal, right: _paddingLateralCaixaPrincipal, bottom: _paddingBottomCaixaPrincipal),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildLabel('CONFIGURAÇÕES DE LABORATÓRIO', marginBottom: 2),
-                        Text('SELECIONE ABAIXO QUAIS DIAS SÃO DE\nLABORATÓRIO E O QUE PRECISA LEVAR', style: TextStyle(fontFamily: 'Lato', fontSize: 11, color: _corDicaInput, height: 1.2)),
-                        SizedBox(height: _espacoInputAteProximoTitulo),
-
-                        ..._turmas.asMap().entries.map((entry) {
-                          int tIndex = entry.key;
-                          TurmaInputData turma = entry.value;
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              InkWell(
-                                onTap: () => setState(() => turma.isLogisticaExpanded = !turma.isLogisticaExpanded),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                  child: Row(
-                                    children: [
-                                      Transform.rotate(
-                                        angle: turma.isLogisticaExpanded ? 3.14159 : 0,
-                                        child: Image.asset('assets/images/seta_icon.png', width: _tamanhoIconeSeta, height: _tamanhoIconeSeta, color: _corLabel),
-                                      ),
-                                      SizedBox(width: _espacoSetaTexto),
-                                      Text(turma.getDisplayTitle(tIndex), style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w800, fontSize: _tamanhoTextoLabel, color: _corLabel)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              
-                              AnimatedCrossFade(
-                                duration: const Duration(milliseconds: 300),
-                                firstCurve: Curves.easeOutCubic,
-                                secondCurve: Curves.easeOutCubic,
-                                sizeCurve: Curves.easeOutCubic,
-                                alignment: Alignment.topCenter,
-                                crossFadeState: turma.isLogisticaExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                                firstChild: const SizedBox(width: double.infinity, height: 0),
-                                secondChild: Container(
-                                  width: double.infinity,
-                                  child: Column(
-                                    children: turma.horarios.map((hor) {
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 16.0, top: 8.0),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: BoxDecoration(
-                                            color: _corFundoInput, 
-                                            borderRadius: BorderRadius.circular(_raioBordaCaixaPrincipal),
-                                            border: Border.all(color: _corBordaInativa, width: 1.5),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start, 
-                                            children: [
-                                              Text(
-                                                '${hor.diaCtrl.text}   ${hor.inicioCtrl.text} - ${hor.fimCtrl.text}', 
-                                                style: const TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF969AA0))
-                                              ),
-                                              const SizedBox(height: 14),
-
-                                              Row(
-                                                children: [
-                                                  _buildToggle(
-                                                    valor: hor.isLaboratorio, 
-                                                    onChanged: (v) {
-                                                      setState(() {
-                                                        hor.isLaboratorio = v;
-                                                        if (!v) hor.precisaEpi = false; 
-                                                      });
-                                                    }
-                                                  ),
-                                                  SizedBox(width: _espacoToggleAteTexto),
-                                                  Transform.translate(
-                                                    offset: Offset(0, _deslocamentoVerticalTextoToggle),
-                                                    child: Text('É LABORATÓRIO?', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel.withOpacity(hor.isLaboratorio ? 1.0 : 0.5), height: 1.0)),
-                                                  ),
-                                                ],
-                                              ),
-                                              
-                                              AnimatedCrossFade(
-                                                duration: const Duration(milliseconds: 300),
-                                                firstCurve: Curves.easeOutCubic,
-                                                secondCurve: Curves.easeOutCubic,
-                                                sizeCurve: Curves.easeOutCubic,
-                                                alignment: Alignment.topCenter,
-                                                crossFadeState: hor.isLaboratorio ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                                                firstChild: const SizedBox(width: double.infinity, height: 0),
-                                                secondChild: Container(
-                                                  width: double.infinity,
-                                                  padding: const EdgeInsets.only(top: 14.0),
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      _buildFrequenciaSelector(hor),
-                                                      
-                                                      if (hor.frequenciaLab == 1 || hor.frequenciaLab == 2)
-                                                        Padding(
-                                                          padding: const EdgeInsets.only(top: 8.0, left: 2.0),
-                                                          child: Text(
-                                                            hor.frequenciaLab == 1
-                                                              ? 'Aulas a cada 15 dias iniciando a partir da 1ª ${hor.diaCtrl.text.toUpperCase()} disponível.\nToque em QUINZENAL 1 novamente para alternar.'
-                                                              : 'Aulas a cada 15 dias iniciando a partir da 2ª ${hor.diaCtrl.text.toUpperCase()} disponível.\nToque em QUINZENAL 2 novamente para alternar.',
-                                                            style: TextStyle(fontFamily: 'Lato', fontSize: 11, color: _corDicaInput, height: 1.2),
-                                                          ),
-                                                        )
-                                                      else if (hor.frequenciaLab == 3)
-                                                        Padding(
-                                                          padding: const EdgeInsets.only(top: 14.0),
-                                                          child: Wrap(
-                                                            spacing: 8, runSpacing: 8,
-                                                            children: hor.obterDatasSemestre().map((d) {
-                                                              bool ativo = hor.datasSelecionadas.contains(d);
-                                                              String texto = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
-                                                              return GestureDetector(
-                                                                onTap: () {
-                                                                  setState(() {
-                                                                    if (ativo) hor.datasSelecionadas.remove(d);
-                                                                    else hor.datasSelecionadas.add(d);
-                                                                  });
-                                                                },
-                                                                child: AnimatedContainer(
-                                                                  duration: const Duration(milliseconds: 200),
-                                                                  width: 58, 
-                                                                  height: 40,
-                                                                  alignment: Alignment.center,
-                                                                  decoration: BoxDecoration(
-                                                                    gradient: ativo 
-                                                                      ? const LinearGradient(colors: [Color(0xFF0460E9), Color(0xFF0D41A9)], begin: Alignment.centerLeft, end: Alignment.centerRight)
-                                                                      : null,
-                                                                    color: ativo ? null : _corFundoInput,
-                                                                    border: Border.all(
-                                                                      color: ativo ? const Color(0xFF0085FF) : _corBordaInativa, 
-                                                                      width: ativo ? 1.7 : 1.5
-                                                                    ),
-                                                                    borderRadius: BorderRadius.circular(6.7)
-                                                                  ),
-                                                                  child: Text(texto, style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, color: ativo ? Colors.white : _corTextoDigitado, fontSize: 13)),
-                                                                )
-                                                              );
-                                                            }).toList(),
-                                                          ),
-                                                        )
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                              
-                                              const SizedBox(height: 14),
-                                              Row(
-                                                children: [
-                                                  _buildToggle(
-                                                    valor: hor.precisaEpi, 
-                                                    isEnabled: hor.isLaboratorio, 
-                                                    onChanged: (v) => setState(() => hor.precisaEpi = v)
-                                                  ),
-                                                  SizedBox(width: _espacoToggleAteTexto),
-                                                  Transform.translate(
-                                                    offset: Offset(0, _deslocamentoVerticalTextoToggle),
-                                                    child: Text('PRECISA DE EPIS?', style: TextStyle(fontFamily: 'Aristotelica', fontSize: _tamanhoFonteDigitada, fontWeight: FontWeight.w700, color: _corLabel.withOpacity(hor.isLaboratorio ? (hor.precisaEpi ? 1.0 : 0.5) : 0.3), height: 1.0)),
-                                                  ),
-                                                ],
-                                              ),
-                                              
-                                              AnimatedCrossFade(
-                                                duration: const Duration(milliseconds: 300),
-                                                firstCurve: Curves.easeOutCubic,
-                                                secondCurve: Curves.easeOutCubic,
-                                                sizeCurve: Curves.easeOutCubic,
-                                                alignment: Alignment.topCenter,
-                                                crossFadeState: hor.precisaEpi ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                                                firstChild: const SizedBox(width: double.infinity, height: 0),
-                                                secondChild: Container(
-                                                  width: double.infinity,
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      const SizedBox(height: 16),
-                                                      Wrap(
-                                                        spacing: 8, runSpacing: 8,
-                                                        children: [
-                                                          ...hor.epis.map((epi) {
-                                                            return GestureDetector(
-                                                              onTap: () {
-                                                                setState(() {
-                                                                  if (epi.isCustom && epi.ativo) {
-                                                                    hor.epis.remove(epi);
-                                                                  } else {
-                                                                    epi.ativo = !epi.ativo;
-                                                                  }
-                                                                });
-                                                              },
-                                                              child: _buildEpiChip(epi.nome, ativo: epi.ativo),
-                                                            );
-                                                          }).toList(),
-
-                                                          if (hor.isAddingEpi)
-                                                            Container(
-                                                              height: _alturaBotoes,
-                                                              width: _larguraCaixaEpiNova, 
-                                                              decoration: BoxDecoration(
-                                                                color: _corFundoInput,
-                                                                border: Border.all(color: const Color(0xFF0085FF), width: 1.7), 
-                                                                borderRadius: BorderRadius.circular(6.7),
-                                                              ),
-                                                              alignment: Alignment.center,
-                                                              child: TextField(
-                                                                controller: hor.newEpiCtrl,
-                                                                focusNode: hor.newEpiFocus,
-                                                                autofocus: true,
-                                                                textAlign: TextAlign.center,
-                                                                inputFormatters: [
-                                                                  LengthLimitingTextInputFormatter(20),
-                                                                ],
-                                                                style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTextoEpiNovo, color: _corTextoDigitado, letterSpacing: 1.2),
-                                                                cursorColor: _corBordaFocada, 
-                                                                cursorWidth: 2.5, 
-                                                                cursorHeight: 20, 
-                                                                cursorRadius: const Radius.circular(5.0),
-                                                                decoration: InputDecoration(
-                                                                  border: InputBorder.none,
-                                                                  isDense: true,
-                                                                  contentPadding: EdgeInsets.only(bottom: _deslocamentoVerticalEpiNovo),
-                                                                ),
-                                                                onSubmitted: (_) {
-                                                                  hor.newEpiFocus.unfocus();
-                                                                },
-                                                              ),
-                                                            )
-                                                          else
-                                                            GestureDetector(
-                                                              onTap: () {
-                                                                setState(() => hor.isAddingEpi = true);
-                                                                hor.newEpiFocus.requestFocus();
-                                                              },
-                                                              child: _buildEpiChip('+ ADD', ativo: false),
-                                                            )
-                                                        ],
-                                                      )
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                              )
-                            ],
-                          );
-                        }).toList(),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _wrapWithHistory(caixaLogistica, altLogistica), // 🟢 Aplica a aba Cinza aqui!
           ],
         ),
       ),
     );
   }
 
+  // 🟢 CORREÇÃO 2: Trazendo de volta as instruções claras e o "aulas" inteligente!
+  Widget _buildLabDatesText(HorarioInputData hor) {
+    List<DateTime> todas = hor.obterDatasSemestre(_dataInicio, _dataFim);
+    
+    if (todas.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8.0, left: 2.0),
+        child: Text('O período é muito curto para ter aulas neste dia da semana.', style: TextStyle(fontFamily: 'Lato', fontSize: 11, color: _corDicaInput)),
+      );
+    }
+
+    List<DateTime> validas = [];
+    if (hor.frequenciaLab == 0) validas = todas;
+    else if (hor.frequenciaLab == 1) validas = [for (int i=0; i<todas.length; i+=2) todas[i]];
+    else if (hor.frequenciaLab == 2) validas = [for (int i=1; i<todas.length; i+=2) todas[i]];
+
+    if (validas.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8.0, left: 2.0),
+        child: Text('Nenhuma aula possível com esta configuração.', style: TextStyle(fontFamily: 'Lato', fontSize: 11, color: _corDicaInput)),
+      );
+    }
+
+    String dInicio = DateFormat('dd/MM').format(validas.first);
+    String dFim = DateFormat('dd/MM').format(validas.last);
+    int total = validas.length;
+
+    // 🟢 Instruções perfeitas retornadas conforme sua pedida!
+    String desc = hor.frequenciaLab == 0 
+        ? "Aulas toda semana."
+        : hor.frequenciaLab == 1 
+            ? "Aulas a cada 15 dias iniciando a partir da 1ª ${hor.diaCtrl.text.toUpperCase()} disponível.\nToque em QUINZENAL 1 novamente para alternar."
+            : "Aulas a cada 15 dias iniciando a partir da 2ª ${hor.diaCtrl.text.toUpperCase()} disponível.\nToque em QUINZENAL 2 novamente para alternar.";
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0, left: 2.0),
+      child: Text(
+        '$desc\nTotal: $total aulas. Começando em $dInicio e terminando em $dFim.',
+        style: TextStyle(fontFamily: 'Lato', fontSize: 11, color: _corDicaInput, height: 1.3),
+      ),
+    );
+  }
+
   Widget _buildSectionCriteriosAvaliacao() {
+    List<Widget> altCriterios = [];
+    bool isModoEdicao = widget.disciplinaParaEditar != null;
+    final dOriginal = widget.disciplinaParaEditar;
+    
+    bool formulaModificada = isModoEdicao && _formulaController.text.trim() != dOriginal!.formulaFinal.trim();
+    bool avisosModificados = isModoEdicao && _avisosController.text.trim() != dOriginal!.avisosGerais.trim();
+
+    if (isModoEdicao) {
+      List<String> avaliacoesAtuais = _avaliacoes.where((a) => a.ativo).map((a) => a.nome).toList();
+      List<String> avaliacoesAntigas = dOriginal!.avaliacoesAtivas;
+
+      for (var ant in avaliacoesAntigas) {
+        if (!avaliacoesAtuais.contains(ant)) altCriterios.add(_buildAltText('TINHA: $ant'));
+      }
+      for (var at in avaliacoesAtuais) {
+        // 🟢 Utilizando o Tachado Inteligente após os dois-pontos!
+        if (!avaliacoesAntigas.contains(at)) altCriterios.add(_buildAltText('AVALIAÇÃO ADICIONADA: $at', tachado: true));
+      }
+
+      if (formulaModificada) altCriterios.add(_buildAltText('FÓRMULA: ${dOriginal.formulaFinal}'));
+    }
+
+    final user = context.read<UserProvider>().currentUser;
+    final bool isRepresentante = (user?.isRC ?? false) && !(user?.isGremio ?? false);
+    
+    String textoBotao = isModoEdicao ? (isRepresentante ? 'SUGERIR EDIÇÕES' : 'SALVAR EDIÇÕES') : 'SALVAR DISCIPLINA';
+
+    List<Color> coresBotao = isRepresentante ? const [Color(0xFFEBC12B), Color(0xFFD38F0D)] : const [Color(0xFF7C9F19), Color(0xFFAFCB00)]; 
+    Color corBordaBotao = isRepresentante ? const Color(0xFFFFBF00) : const Color(0xFFCEDD26);
+
+    // 🟢 CRIANDO A CAIXA DOS CRITÉRIOS
+    Widget caixaCriterios = _buildOutlinedBox(
+      child: _isEstagio 
+        ? Container(
+            width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 30), alignment: Alignment.center,
+            child: Text('EM BREVE', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 19, color: _corBordaInativa, letterSpacing: 2.0)),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: [
+                  ..._avaliacoes.map((av) {
+                    return GestureDetector(
+                      onTap: () => setState(() { if (av.isCustom && av.ativo) { _avaliacoes.remove(av); } else { av.ativo = !av.ativo; } }),
+                      child: _buildEpiChip(av.nome, ativo: av.ativo),
+                    );
+                  }).toList(),
+
+                  if (_isAddingAvaliacao)
+                    Container(
+                      height: _alturaBotoes, width: _larguraCaixaAvaliacaoNova, 
+                      decoration: BoxDecoration(color: _corFundoInput, border: Border.all(color: const Color(0xFF0085FF), width: 1.7), borderRadius: BorderRadius.circular(6.7)),
+                      alignment: Alignment.center,
+                      child: TextField(
+                        controller: _newAvaliacaoCtrl, focusNode: _newAvaliacaoFocus, autofocus: true, textAlign: TextAlign.center,
+                        inputFormatters: [LengthLimitingTextInputFormatter(20)],
+                        style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTextoEpiNovo, color: _corTextoDigitado, letterSpacing: 1.2),
+                        cursorColor: _corBordaFocada, cursorWidth: 2.5, cursorHeight: 20, cursorRadius: const Radius.circular(5.0),
+                        decoration: InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.only(bottom: _deslocamentoVerticalEpiNovo)),
+                        onSubmitted: (_) { _newAvaliacaoFocus.unfocus(); },
+                      ),
+                    )
+                  else
+                    GestureDetector(
+                      onTap: () { setState(() => _isAddingAvaliacao = true); _newAvaliacaoFocus.requestFocus(); },
+                      child: _buildEpiChip('+ ADD', ativo: false),
+                    )
+                ],
+              ),
+              SizedBox(height: _espacoInputAteProximoTitulo),
+              
+              _buildLabel('FÓRMULA FINAL'),
+              _buildRealTextField(
+                hint: 'EX: (P1+P2+T1)/3', controller: _formulaController, focusNode: _formulaFocus, 
+                nextFocus: _avisosFocus, isModificado: formulaModificada
+              ),
+            ],
+          ),
+    );
+
+    // 🟢 CRIANDO A CAIXA DOS AVISOS (Sem Box Duplo)
+    Widget caixaAvisos = _buildRealTextField(
+      hint: 'ESCREVA DICAS, AVISOS, CULTURAS DA DISCIPLINA...', 
+      controller: _avisosController, focusNode: _avisosFocus, minLines: 3, maxLines: 5,
+      isModificado: avisosModificados
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle('CRITÉRIO DE AVALIAÇÃO'),
-        _buildOutlinedBox(
-          child: _isEstagio 
-            ? Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 30),
-                alignment: Alignment.center,
-                child: Text('EM BREVE', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 19, color: _corBordaInativa, letterSpacing: 2.0)),
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    spacing: 8, runSpacing: 8,
-                    children: [
-                      ..._avaliacoes.map((av) {
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              if (av.isCustom && av.ativo) {
-                                _avaliacoes.remove(av);
-                              } else {
-                                av.ativo = !av.ativo;
-                              }
-                            });
-                          },
-                          child: _buildEpiChip(av.nome, ativo: av.ativo),
-                        );
-                      }).toList(),
-
-                      if (_isAddingAvaliacao)
-                        Container(
-                          height: _alturaBotoes,
-                          width: _larguraCaixaAvaliacaoNova, 
-                          decoration: BoxDecoration(
-                            color: _corFundoInput,
-                            border: Border.all(color: const Color(0xFF0085FF), width: 1.7), 
-                            borderRadius: BorderRadius.circular(6.7),
-                          ),
-                          alignment: Alignment.center,
-                          child: TextField(
-                            controller: _newAvaliacaoCtrl,
-                            focusNode: _newAvaliacaoFocus,
-                            autofocus: true,
-                            textAlign: TextAlign.center,
-                            inputFormatters: [LengthLimitingTextInputFormatter(20)],
-                            style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoTextoEpiNovo, color: _corTextoDigitado, letterSpacing: 1.2),
-                            cursorColor: _corBordaFocada, 
-                            cursorWidth: 2.5, cursorHeight: 20, cursorRadius: const Radius.circular(5.0),
-                            decoration: InputDecoration(border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.only(bottom: _deslocamentoVerticalEpiNovo)),
-                            onSubmitted: (_) { _newAvaliacaoFocus.unfocus(); },
-                          ),
-                        )
-                      else
-                        GestureDetector(
-                          onTap: () {
-                            setState(() => _isAddingAvaliacao = true);
-                            _newAvaliacaoFocus.requestFocus();
-                          },
-                          child: _buildEpiChip('+ ADD', ativo: false),
-                        )
-                    ],
-                  ),
-                  SizedBox(height: _espacoInputAteProximoTitulo),
-                  
-                  _buildLabel('FÓRMULA FINAL'),
-                  _buildRealTextField(hint: 'EX: (P1+P2+T1)/3', controller: _formulaController, focusNode: _formulaFocus, nextFocus: _avisosFocus),
-                ],
-              ),
-        ),
+        _wrapWithHistory(caixaCriterios, altCriterios), // 🟢 Wrapper da primeira caixa
         
         SizedBox(height: _espacoEntreSecoes),
         _buildSectionTitle('AVISOS GERAIS E COMPLEMENTARES'),
         
-        _buildRealTextField(
-          hint: 'ESCREVA DICAS, AVISOS, CULTURAS DA DISCIPLINA QUE PODEM SER RELEVANTES PARA OS ALUNOS', 
-          controller: _avisosController, focusNode: _avisosFocus, minLines: 3, maxLines: 5
-        ),
+        _wrapWithHistory(caixaAvisos, avisosModificados ? [_buildAltText('AVISOS GERAIS ALTERADOS')] : []), // 🟢 Wrapper da segunda caixa
         
         SizedBox(height: _espacoAvisosAteSalvar),
+
         GestureDetector(
           onTap: _isLoadingSave ? null : _salvarDisciplina, 
           child: Container(
             height: _alturaBotaoSalvar, width: double.infinity,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF7C9F19), Color(0xFFAFCB00)], begin: Alignment.centerLeft, end: Alignment.centerRight), 
-              border: Border.all(color: const Color(0xFFCEDD26), width: 1.7), 
+              gradient: LinearGradient(colors: coresBotao, begin: Alignment.centerLeft, end: Alignment.centerRight), 
+              border: Border.all(color: corBordaBotao, width: 1.7), 
               borderRadius: BorderRadius.circular(6.7)
             ),
             alignment: Alignment.center,
             child: _isLoadingSave 
                 ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: Color(0xFF303B02)))
-                : const Padding(
-                    padding: EdgeInsets.only(top: 3.0), 
-                    child: Text('SALVAR DISCIPLINA', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF303B02), letterSpacing: 1.2))
+                : Padding(
+                    padding: const EdgeInsets.only(top: 3.0), 
+                    child: Text(textoBotao, style: const TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: 16, color: Color(0xFF303B02), letterSpacing: 1.2))
                   ),
           ),
         ),
@@ -1218,21 +1453,146 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     );
   }
 
-  Widget _buildOutlinedBox({required Widget child}) {
+  // 🟢 Box Principal agora aceita cor personalizada da borda (Para a Nova Turma Cinza)
+  Widget _buildOutlinedBox({required Widget child, Color? corBordaPersonalizada}) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.only(
-        top: _paddingTopCaixaPrincipal,
-        bottom: _paddingBottomCaixaPrincipal,
-        left: _paddingLateralCaixaPrincipal,
-        right: _paddingLateralCaixaPrincipal,
-      ), 
+      padding: EdgeInsets.only(top: _paddingTopCaixaPrincipal, bottom: _paddingBottomCaixaPrincipal, left: _paddingLateralCaixaPrincipal, right: _paddingLateralCaixaPrincipal), 
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(_raioBordaCaixaPrincipal), 
-        border: Border.all(color: _corDestaque, width: 1.5),
+        border: Border.all(color: corBordaPersonalizada ?? _corDestaque, width: 1.5), // 🟢 Cor dinâmica
       ),
       child: child,
+    );
+  }
+
+  // 🟢 NOVO: Gerador de textos para o Histórico (Tachado Inteligente Pós Dois-Pontos)
+  Widget _buildAltText(String text, {bool tachado = false}) {
+    // Se deve ser tachado E contém dois-pontos (ex: "PROFESSOR ADICIONADO: João")
+    if (tachado && text.contains(':')) {
+      final parts = text.split(':');
+      final prefix = '${parts[0]}:';
+      final suffix = parts.sublist(1).join(':'); // Junta o resto caso tenha mais de um ':'
+
+      return Padding(
+        padding: EdgeInsets.only(bottom: _espacoEntreTextosAba),
+        child: RichText(
+          text: TextSpan(
+            style: const TextStyle(fontFamily: 'Aristotelica', fontSize: 19.0, fontWeight: FontWeight.w700, color: Color(0xFFF0F0F0), height: 1.2),
+            children: [
+              TextSpan(text: prefix),
+              TextSpan(
+                text: suffix,
+                style: const TextStyle(
+                  decoration: TextDecoration.lineThrough,
+                  decorationColor: Color(0xFFF0F0F0),
+                  decorationThickness: 2.0,
+                )
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Comportamento normal ou tachado simples (Ex: "T1")
+    return Padding(
+      padding: EdgeInsets.only(bottom: _espacoEntreTextosAba),
+      child: Text(
+        text, 
+        style: TextStyle(
+          fontFamily: 'Aristotelica', 
+          fontSize: 19.0, 
+          fontWeight: FontWeight.w700, 
+          color: const Color(0xFFF0F0F0), 
+          height: 1.2,
+          decoration: tachado ? TextDecoration.lineThrough : TextDecoration.none,
+          decorationColor: const Color(0xFFF0F0F0),
+          decorationThickness: 2.0,
+        )
+      ),
+    );
+  }
+
+  Widget _wrapWithHistory(Widget mainBox, List<Widget> alteracoes, {String tituloAba = 'ANTERIORMENTE', DateTime? dataPersonalizada}) {
+    if (alteracoes.isEmpty) return mainBox;
+
+    String dataExibicao = '';
+    if (dataPersonalizada != null) {
+      dataExibicao = DateFormat('dd/MM/yyyy').format(dataPersonalizada); // 🟢 Força a data de hoje
+    } else if (widget.disciplinaParaEditar != null) {
+      if (widget.disciplinaParaEditar!.dataEdicao != null) {
+        dataExibicao = DateFormat('dd/MM/yyyy').format(widget.disciplinaParaEditar!.dataEdicao!.toDate());
+      } else {
+        dataExibicao = DateFormat('dd/MM/yyyy').format(widget.disciplinaParaEditar!.dataInicio.toDate());
+      }
+    } else {
+      dataExibicao = DateFormat('dd/MM/yyyy').format(DateTime.now());
+    }
+
+    Widget historyBox = Container(
+      width: double.infinity,
+      padding: EdgeInsets.only(top: _espacoCimaTituloAba, bottom: 16, left: 16, right: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFBABBBB),
+        borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(6.0), bottomRight: Radius.circular(6.0)),
+        border: Border.all(color: const Color(0xFF969AA0), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(tituloAba, style: const TextStyle(fontFamily: 'LeagueSpartan', fontSize: 18.0, fontWeight: FontWeight.w800, color: Color(0xFF737576))),
+          SizedBox(height: _espacoTituloAbaAteData),
+          Text(dataExibicao, style: const TextStyle(fontFamily: 'Lato', fontStyle: FontStyle.italic, fontSize: 14.0, fontWeight: FontWeight.w800, color: Color(0xFFF0F0F0))),
+          SizedBox(height: _espacoDataAbaAteTexto),
+          ...alteracoes, 
+        ],
+      ),
+    );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Opacity(opacity: 0.0, child: mainBox), 
+            Transform.translate(offset: const Offset(0, -12), child: historyBox),
+          ],
+        ),
+        Positioned(top: 0, left: 0, right: 0, child: mainBox),
+      ],
+    );
+  }
+
+  // 🟢 NOVA FUNÇÃO: A aba cinza de "ANTERIORMENTE"
+  Widget _buildHistoryBox(List<String> alteracoes) {
+    if (alteracoes.isEmpty) return const SizedBox.shrink();
+    
+    // Pegando a data atual para o histórico de edição
+    String dataEdicao = DateFormat('dd/MM/yyyy').format(DateTime.now());
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFBABBBB),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(6.0),
+          bottomRight: Radius.circular(6.0),
+        ),
+        border: Border.all(color: const Color(0xFF969AA0), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('ANTERIORMENTE', style: TextStyle(fontFamily: 'LeagueSpartan', fontSize: 18.0, fontWeight: FontWeight.w800, color: Color(0xFF737576))),
+          Text(dataEdicao, style: const TextStyle(fontFamily: 'LeagueSpartan', fontSize: 14.0, fontWeight: FontWeight.w800, color: Color(0xFF737576))),
+          const SizedBox(height: 8),
+          ...alteracoes.map((alt) => Text(alt, style: const TextStyle(fontFamily: 'Aristotelica', fontSize: 19.0, fontWeight: FontWeight.w700, color: Color(0xFFF0F0F0), height: 1.2))),
+        ],
+      ),
     );
   }
 
@@ -1247,6 +1607,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     required String hint, 
     required TextEditingController controller, 
     required FocusNode focusNode, 
+    bool isModificado = false, // 🟢 NOVO PARÂMETRO
     int? minLines = 1,
     int? maxLines = 1,
     TextAlign textAlign = TextAlign.start, 
@@ -1254,11 +1615,15 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     TextInputType keyboardType = TextInputType.text,
     FocusNode? nextFocus,
     ValueChanged<String>? onChanged, 
-    List<TextInputFormatter>? inputFormatters, // 🟢 Habilita a formatação (ex: colocar barra '/' na data)
+    List<TextInputFormatter>? inputFormatters, 
   }) {
     final bool isPreenchido = controller.text.isNotEmpty;
     final bool isMultiline = minLines != null && minLines > 1;
     
+    // 🟢 Lógica de cores: Amarelo se editado, senão segue o padrão
+    Color corBordaAtiva = isModificado ? const Color(0xFFFFBF00) : _corBordaFocada;
+    Color corBordaPreenchida = isModificado ? const Color(0xFFFFBF00) : const Color(0xFFA1BF06);
+
     return SizedBox(
       height: !isMultiline ? 47 : null,
       child: TextField(
@@ -1270,24 +1635,20 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
         textAlign: alignCenter ? TextAlign.center : textAlign,
         keyboardType: isMultiline ? TextInputType.multiline : keyboardType,
         textInputAction: nextFocus != null ? TextInputAction.next : (isMultiline ? TextInputAction.newline : TextInputAction.done),
-        inputFormatters: inputFormatters, // 🟢 Aplica os formatadores
+        inputFormatters: inputFormatters, 
         onSubmitted: (_) { 
           if (nextFocus != null) { FocusScope.of(context).requestFocus(nextFocus); } else if (!isMultiline) { FocusScope.of(context).unfocus(); } 
         },
         style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoFonteDigitada, color: _corTextoDigitado),
         textAlignVertical: isMultiline ? TextAlignVertical.top : TextAlignVertical.center,
-        cursorColor: _corBordaFocada, 
+        cursorColor: corBordaAtiva, 
         cursorWidth: 2.5, cursorHeight: 20, cursorRadius: const Radius.circular(5.0),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(fontFamily: 'Aristotelica', color: _corDicaInput, fontSize: _tamanhoFonteDica, height: 1.0),
-          contentPadding: EdgeInsets.only(
-            left: 11.0, right: 11.0, 
-            top: 15.0, 
-            bottom: isMultiline ? 15.0 : 2.0
-          ),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6.7), borderSide: BorderSide(color: isPreenchido ? const Color(0xFFA1BF06) : _corBordaInativa, width: 1.5)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6.7), borderSide: BorderSide(color: _corBordaFocada, width: 2.0)),
+          contentPadding: EdgeInsets.only(left: 11.0, right: 11.0, top: 15.0, bottom: isMultiline ? 15.0 : 2.0),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6.7), borderSide: BorderSide(color: isPreenchido ? corBordaPreenchida : _corBordaInativa, width: 1.5)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6.7), borderSide: BorderSide(color: corBordaAtiva, width: 2.0)),
           fillColor: _corFundoInput,
           filled: true,
         ),
@@ -1295,8 +1656,9 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     );
   }
 
-  Widget _buildInstitutoDropdown() {
+  Widget _buildInstitutoDropdown({bool isModificado = false}) {
     bool isPreenchido = _institutoController.text.isNotEmpty;
+    Color corBordaAtual = isModificado ? const Color(0xFFFFBF00) : (isPreenchido ? const Color(0xFFA1BF06) : _corBordaInativa);
     
     return GestureDetector(
       onTap: () {
@@ -1311,7 +1673,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
           color: _corFundoInput,
           borderRadius: BorderRadius.circular(6.7),
           border: Border.all(
-            color: _isInstitutoExpanded ? _corBordaFocada : (isPreenchido ? const Color(0xFFA1BF06) : _corBordaInativa),
+            color: _isInstitutoExpanded ? _corBordaFocada : corBordaAtual, // 🟢 Aplica o amarelo aqui
             width: _isInstitutoExpanded ? 2.0 : 1.5,
           ),
         ),
@@ -1406,9 +1768,10 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     );
   }
 
-  Widget _buildDepartamentoDropdown() {
+  Widget _buildDepartamentoDropdown({bool isModificado = false}) {
     bool isInstitutoSelecionado = _institutoController.text.isNotEmpty;
     bool isPreenchido = _departamentoController.text.isNotEmpty;
+    Color corBordaAtual = isModificado ? const Color(0xFFFFBF00) : (isPreenchido ? const Color(0xFFA1BF06) : _corBordaInativa);
     
     List<String> deptsAtuais = _bancoDeDepartamentos[_institutoController.text] ?? [];
     
@@ -1428,7 +1791,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
             color: _corFundoInput,
             borderRadius: BorderRadius.circular(6.7),
             border: Border.all(
-              color: _isDeptExpanded ? _corBordaFocada : (isPreenchido ? const Color(0xFFA1BF06) : _corBordaInativa),
+              color: _isDeptExpanded ? _corBordaFocada : corBordaAtual, // 🟢 Aplica o amarelo aqui
               width: _isDeptExpanded ? 2.0 : 1.5,
             ),
           ),
@@ -1593,23 +1956,28 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                 onSelectedItemChanged: (index) {
                   int newMins = minTime + (index * 10);
                   if (isFim) { 
-                    hor.fimVal = newMins; hor.fimCtrl.text = _formatMinsToTime(newMins); 
+                    hor.fimVal = newMins; 
+                    hor.fimCtrl.text = _formatMinsToTime(newMins); 
+                    // 🟢 MÁGICA: Força a interface a reconhecer a nova digitação de FIM!
+                    _atualizarTela();
                   } else {
-                    hor.inicioVal = newMins; hor.inicioCtrl.text = _formatMinsToTime(newMins);
+                    hor.inicioVal = newMins; 
+                    hor.inicioCtrl.text = _formatMinsToTime(newMins);
                     
                     int minFimPermitido = hor.inicioVal + 10;
                     if (hor.fimVal < minFimPermitido) {
                       hor.fimVal = minFimPermitido;
-                      if (hor.fimVal > 1120) hor.fimVal = 1120;
+                      if (hor.fimVal > 1380) hor.fimVal = 1380;
                       hor.fimCtrl.text = _formatMinsToTime(hor.fimVal);
                     }
                     
                     int novoIndexFim = (hor.fimVal - minFimPermitido) ~/ 10;
                     if(novoIndexFim < 0) novoIndexFim = 0;
                     
-                    if (hor.fimScroll.hasClients) {
-                      hor.fimScroll.jumpToItem(novoIndexFim);
-                    }
+                    // 🟢 MÁGICA: Recria o controlador de FIM para sincronizar com a nova lista de Início
+                    hor.fimScroll.dispose();
+                    hor.fimScroll = FixedExtentScrollController(initialItem: novoIndexFim);
+                    
                     _atualizarTela(); 
                   }
                 },
@@ -1802,6 +2170,8 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
   // 🔘 FOOTER (RODAPÉ DE NAVEGAÇÃO E AÇÕES)
   // =========================================================================
   Widget _buildFooterBar(BuildContext context) {
+    bool isModoEdicao = widget.disciplinaParaEditar != null; // 🟢 Verifica o modo
+
     return Container(
       decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: const Color(0xFFE5E7EB), width: _espessuraLinhaFooter))),
       child: SafeArea(
@@ -1840,11 +2210,12 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                   children: [
                     RichText(
                       textAlign: TextAlign.right,
-                      text: const TextSpan(
-                        style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF), height: 1.1),
+                      text: TextSpan(
+                        style: const TextStyle(fontFamily: 'Aristotelica', fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF), height: 1.1),
                         children: [
-                          TextSpan(text: 'LIMPAR\n'),
-                          TextSpan(text: 'DISCIPLINA?'),
+                          // 🟢 MUDA O TEXTO DINAMICAMENTE
+                          TextSpan(text: isModoEdicao ? 'DESFAZER\n' : 'LIMPAR\n'),
+                          TextSpan(text: isModoEdicao ? 'EDIÇÃO?' : 'DISCIPLINA?'),
                         ],
                       ),
                     ),
@@ -2135,10 +2506,10 @@ class HorarioInputData {
     diaScroll.dispose(); inicioScroll.dispose(); fimScroll.dispose();
   }
 
-  List<DateTime> obterDatasSemestre() {
+  // 🟢 MÁGICA: Agora essa função varre apenas o período de início e fim da disciplina!
+  List<DateTime> obterDatasSemestre(DateTime dataInicio, DateTime dataFim) {
     List<DateTime> dates = [];
-    DateTime hoje = DateTime.now();
-    DateTime now = DateTime(hoje.year, hoje.month, hoje.day); 
+    DateTime now = DateTime(dataInicio.year, dataInicio.month, dataInicio.day); 
     
     int targetDay = DateTime.monday;
     switch(diaCtrl.text.toUpperCase()) {
@@ -2147,10 +2518,16 @@ class HorarioInputData {
       case 'QUINTA': targetDay = DateTime.thursday; break;
       case 'SEXTA': targetDay = DateTime.friday; break;
       case 'SÁBADO': targetDay = DateTime.saturday; break;
+      case 'DOMINGO': targetDay = DateTime.sunday; break;
     }
     
     while (now.weekday != targetDay) { now = now.add(const Duration(days: 1)); }
-    for (int i = 0; i < 20; i++) { dates.add(now.add(Duration(days: i * 7))); } 
+    
+    DateTime endLimit = DateTime(dataFim.year, dataFim.month, dataFim.day, 23, 59, 59);
+    while (now.isBefore(endLimit) || now.isAtSameMomentAs(endLimit)) { 
+      dates.add(now);
+      now = now.add(const Duration(days: 7));
+    } 
     return dates;
   }
 }

@@ -19,7 +19,8 @@ class AdminUsuariosPage extends StatelessWidget {
     }
 
     // O "Admin" supremo pode dar o cargo de admin. O Gremio normal não pode criar outros admins.
-    final bool amISupreme = currentUser.role == UserRole.admin;
+    // 🟢 Agora verificamos o poder supremo do Chov
+    final bool amISupreme = currentUser.isChov;
 
     return Scaffold(
       appBar: AppBar(
@@ -57,16 +58,36 @@ class AdminUsuariosPage extends StatelessWidget {
                     : DropdownButton<String>(
                         value: usuario.role.name,
                         style: const TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, color: Color(0xFF0460E9)),
-                        items: ['aluno', 'representante', 'gremio', if (amISupreme) 'admin'].map((String value) {
+                        items: ['aluno', 'representante', 'gremio', if (amISupreme) 'chov'].map((String value) {
                           return DropdownMenuItem<String>(
                             value: value,
                             child: Text(value.toUpperCase()),
                           );
                         }).toList(),
-                        onChanged: (novoCargo) {
+                        onChanged: (novoCargo) async {
                           if (novoCargo != null) {
-                            firestoreService.atualizarCargoUsuario(usuario.uid, novoCargo);
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${usuario.nomeCompleto} promovido para $novoCargo!')));
+                            // 1. Mostra um aviso de que está processando
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Atualizando permissões...'), duration: Duration(seconds: 1)),
+                            );
+                            
+                            try {
+                              // 2. AGORA ELE ESPERA (AWAIT) A CONFIRMAÇÃO DA NUVEM
+                              await firestoreService.atualizarCargoUsuario(usuario.uid, novoCargo);
+                              
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('${usuario.nomeCompleto} foi promovido para $novoCargo!'), backgroundColor: Colors.green),
+                                );
+                              }
+                            } catch (e) {
+                              // 3. SE DER ERRO (COMO FALTA DE INTERNET), AVISA NA TELA!
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Erro ao atualizar: $e'), backgroundColor: Colors.red),
+                                );
+                              }
+                            }
                           }
                         },
                       ),

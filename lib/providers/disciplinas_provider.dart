@@ -49,7 +49,7 @@ void _initListener() {
         _disciplinasSubscription?.cancel();
         _disciplinasSubscription = _firestoreService.getDisciplinasGlobais().listen(
           (todasAsDisciplinas) {
-            _minhasDisciplinas = todasAsDisciplinas.where((d) => appUser.turmasIds.contains(d.id)).toList();
+            _minhasDisciplinas = todasAsDisciplinas.where((d) {return d.turmas.any((t) => appUser.turmasIds.contains(t.id));}).toList();
             _isLoading = false;
             notifyListeners();
           },

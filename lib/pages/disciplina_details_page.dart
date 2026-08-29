@@ -102,7 +102,7 @@ class DisciplinaDetailsPage extends StatelessWidget {
                   Text("Depto: ${disciplina.departamento}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black54)),
                   const SizedBox(height: 16),
                   
-                  Row(
+                 Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Expanded(
@@ -110,7 +110,8 @@ class DisciplinaDetailsPage extends StatelessWidget {
                           children: [
                             const Icon(Icons.location_on_outlined, size: 20),
                             const SizedBox(width: 8),
-                            Text(localStr, style: const TextStyle(fontSize: 16)),
+                            // Adicionado um limite de quebra de linha para garantir que botões longos não estourem a tela
+                            Expanded(child: Text(localStr, style: const TextStyle(fontSize: 16), maxLines: 2, overflow: TextOverflow.ellipsis)),
                           ],
                         ),
                       ),
@@ -131,7 +132,7 @@ class DisciplinaDetailsPage extends StatelessWidget {
                             ),
                           ],
                         )
-                      else if (progresso != null)
+                      else // 🟢 A MÁGICA: O 'if (progresso != null)' foi removido daqui!
                         IconButton(
                           icon: const Icon(Icons.history, size: 30, color: Colors.black87),
                           tooltip: 'Editar Diário de Bordo',

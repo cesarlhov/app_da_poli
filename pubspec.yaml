@@ -88,6 +88,10 @@ flutter:
     - family: Yellowtail
       fonts:
         - asset: assets/fonts/Yellowtail-Regular.ttf
+
+    - family: Anton
+      fonts:
+        - asset: assets/fonts/Anton-Regular.ttf
         
     # <<< NOVA FONTE PARA A ASSINATURA DA TELA DE ABERTURA >>>
     - family: MonumentExtended

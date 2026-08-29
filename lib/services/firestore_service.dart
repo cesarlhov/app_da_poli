@@ -172,15 +172,14 @@ class FirestoreService {
   // --- MÉTODOS DE TAREFAS ---
   // =========================================================================
 
-  Future<void> addTarefa(String titulo, DateTime dataEntrega) async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      await _db.collection('users').doc(user.uid).collection('tarefas').add({
-        'titulo': titulo,
-        'dataEntrega': Timestamp.fromDate(dataEntrega),
-        'concluida': false,
-      });
-    }
+  /// Altera o cargo de qualquer usuário (Admin, Chov e Grêmio usam isso)
+  Future<void> atualizarCargoUsuario(String uid, String novoCargo) async {
+    // 🟢 CORRIGIDO: Agora aponta para a coleção 'users' correta!
+    await _db.collection('users').doc(uid).set({
+      'role': novoCargo,
+      'isGremio': novoCargo == 'gremio' || novoCargo == 'chov' || novoCargo == 'admin',
+      'isRC': novoCargo == 'representante' || novoCargo == 'gremio' || novoCargo == 'chov' || novoCargo == 'admin',
+    }, SetOptions(merge: true)); 
   }
 
   Stream<List<Tarefa>> getTarefas() {
@@ -214,19 +213,20 @@ class FirestoreService {
         .map((s) => s.docs.map((d) => Aviso.fromMap(d.id, d.data())).toList());
   }
 
-  /// Registra presença ou falta em um dia específico no histórico do aluno
-  Future<void> registrarPresenca(String disciplinaId, String dataIso, bool presente) async {
+  // 🟢 Agora aceita bool? (nulo significa "Sem Registro")
+  Future<void> registrarPresenca(String disciplinaId, String dataIso, bool? presente) async {
     final user = _auth.currentUser;
     if (user != null) {
-      await _db
+      final docRef = _db
           .collection('users')
           .doc(user.uid)
           .collection('progresso_disciplinas')
-          .doc(disciplinaId)
-          .update({
-        // Atualiza apenas a data específica dentro do mapa historicoPresenca
-        'historicoPresenca.$dataIso': presente,
-      });
+          .doc(disciplinaId);
+
+      // 🟢 O set com merge evita o erro "not-found", criando o documento se for novo
+      await docRef.set({
+        'historicoPresenca': { dataIso: presente }
+      }, SetOptions(merge: true));
     }
   }
 
@@ -265,39 +265,79 @@ class FirestoreService {
     );
   }
 
-  /// Altera o cargo de qualquer usuário (Admin e Grêmio usam isso)
-  Future<void> atualizarCargoUsuario(String uid, String novoCargo) async {
-    await _db.collection('users').doc(uid).update({'role': novoCargo});
-  }
-
   /// O Grêmio clica nisso para validar uma disciplina sugerida por um RC
   Future<void> aprovarDisciplina(String disciplinaId) async {
     await _db.collection('disciplinas').doc(disciplinaId).update({'isVerificada': true});
   }
 
-  // 🟢 NOVO: Função para o aluno se desmatricular de uma disciplina
-  Future<void> desmatricularDeDisciplina(String disciplinaId) async {
+  // 🟢 NOVO: Função para excluir disciplina definitivamente do banco
+  Future<void> excluirDisciplina(String disciplinaId) async {
     final user = _auth.currentUser;
     if (user == null) return;
     
-    final batch = _db.batch();
+    // Deleta a disciplina principal do banco
+    await _db.collection('disciplinas').doc(disciplinaId).delete();
+  }
 
-    // 1. Remove a ID da lista de turmas
-    final userRef = _db.collection('users').doc(user.uid);
-    batch.update(userRef, {
-      'turmasIds': FieldValue.arrayRemove([disciplinaId])
+  // 🟢 MATRICULAR OFICIAL: Salva a Turma e a Disciplina
+  Future<void> matricular(String disciplinaId, String turmaId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    await _db.collection('users').doc(user.uid).update({
+      'disciplinasIds': FieldValue.arrayUnion([disciplinaId]), // Garante compatibilidade
+      'turmasIds': FieldValue.arrayUnion([turmaId])
     });
 
-    // 2. Decrementa o número global de inscritos
-    final disciplinaRef = _db.collection('disciplinas').doc(disciplinaId);
-    batch.update(disciplinaRef, {
-      'numeroInscritos': FieldValue.increment(-1)
+    await _db.collection('disciplinas').doc(disciplinaId).update({
+      'numeroInscritos': FieldValue.increment(1)
+    });
+  }
+
+  // 🟢 DESMATRICULAR OFICIAL: Limpa todas as sujeiras e turmas vinculadas à matéria
+  Future<void> desmatricularDeDisciplina(String disciplinaId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final docDisc = await _db.collection('disciplinas').doc(disciplinaId).get();
+    if (!docDisc.exists) return;
+
+    final dadosDisc = docDisc.data() as Map<String, dynamic>;
+    final List<dynamic> turmas = dadosDisc['turmas'] ?? [];
+    
+    final docUser = await _db.collection('users').doc(user.uid).get();
+    final dadosUser = docUser.data() as Map<String, dynamic>;
+    List<String> turmasDoAluno = List<String>.from(dadosUser['turmasIds'] ?? []);
+
+    List<String> turmasParaRemover = [];
+    for (var t in turmas) {
+      if (turmasDoAluno.contains(t['id'])) turmasParaRemover.add(t['id']);
+      if (turmasDoAluno.contains('${disciplinaId}_${t['id']}')) turmasParaRemover.add('${disciplinaId}_${t['id']}');
+    }
+
+    // Remove do Firebase limpando o Fantasma (Tanto em disciplinasIds quanto em turmasIds)
+    await _db.collection('users').doc(user.uid).update({
+      'disciplinasIds': FieldValue.arrayRemove([disciplinaId]),
+      'turmasIds': FieldValue.arrayRemove(turmasParaRemover)
     });
 
-    // 3. Deleta o espelho de Progresso (Diário de bordo) do aluno
-    final progressoRef = userRef.collection('progresso_disciplinas').doc(disciplinaId);
-    batch.delete(progressoRef);
+    if (turmasParaRemover.isNotEmpty) {
+      await _db.collection('disciplinas').doc(disciplinaId).update({
+        'numeroInscritos': FieldValue.increment(-1)
+      });
+    }
+  }
 
-    await batch.commit(); // Executa tudo
+  /// Adiciona uma nova tarefa no banco de dados
+  Future<void> addTarefa(String titulo, DateTime dataEntrega) async {
+    try {
+      await _db.collection('tarefas').add({
+        'titulo': titulo,
+        'dataEntrega': Timestamp.fromDate(dataEntrega),
+        'concluida': false,
+      });
+    } catch (e) {
+      print('Erro ao adicionar tarefa: $e');
+    }
   }
 }

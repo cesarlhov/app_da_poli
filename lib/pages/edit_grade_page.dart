@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_da_poli/services/firestore_service.dart';
+import 'package:provider/provider.dart';
+import 'package:app_da_poli/providers/user_provider.dart';
 
 class EditGradePage extends StatefulWidget {
   final List<Disciplina> initialDisciplinas;
@@ -26,11 +28,13 @@ class EditGradePage extends StatefulWidget {
 
 class _EditGradePageState extends State<EditGradePage> with SingleTickerProviderStateMixin {
 
-// 🟢 CÁLCULO DE CRÉDITOS AO VIVO NA TELA DE EDIÇÃO
+  String? _disciplinaAguardandoExclusao;
+
+  // 🟢 CÁLCULO DE CRÉDITOS AO VIVO NA TELA DE EDIÇÃO
   int _calcularCreditosDaEdicao() {
     int totalMinutos = 0;
+    final user = context.read<UserProvider>().currentUser;
     
-    // Soma as disciplinas atuais com a que está sendo pré-visualizada agora
     List<Disciplina> todasAtuais = List.from(_disciplinas);
     if (_disciplinaPreview != null) todasAtuais.add(_disciplinaPreview!);
 
@@ -38,9 +42,14 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
       Turma? tValida;
       if (_disciplinaPreview != null && d.id == _disciplinaPreview!.id) {
          tValida = _turmaPreview;
-      } else if (d.turmas.isNotEmpty) {
-         tValida = d.turmas.first;
+      } else if (_turmasLocais.containsKey(d.id)) {
+         tValida = _turmasLocais[d.id];
+      } else {
+         // 🟢 O APP AGORA LÊ A TURMA EXATA E NÃO INVENTA MAIS A TURMA 1
+         var turmasAluno = d.turmas.where((t) => user?.turmasIds.contains(t.id) ?? false).toList();
+         if (turmasAluno.isNotEmpty) tValida = turmasAluno.first;
       }
+      
       if (tValida != null) {
         for (var hor in tValida.horarios) {
           int start = _timeToMin(hor.inicio);
@@ -73,6 +82,7 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
 
   Disciplina? _disciplinaPreview;
   Turma? _turmaPreview;
+  Map<String, Turma> _turmasLocais = {}; // 🟢 Guarda a turma exata escolhida!
   // 🟢 NOVAS VARIÁVEIS DE ESTADO PARA OS BOTÕES
   bool _gradeModificada = false; // Controla se o botão vira "SALVAR" e fecha a tela
   bool _teveInteracao = false;   // Controla se o botão de "RESETAR" aparece
@@ -220,6 +230,17 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
     super.initState();
     _disciplinas = List.from(widget.initialDisciplinas);
     
+    // 🟢 Quando a tela abre, ela lê o perfil e popula a memória com a Turma certa!
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+    if (user != null) {
+      for (var d in _disciplinas) {
+        var turmasDoAluno = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
+        if (turmasDoAluno.isNotEmpty) {
+          _turmasLocais[d.id] = turmasDoAluno.first; 
+        }
+      }
+    }
+    
     _carregarDisciplinasDoHub();
 
     _fadeController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
@@ -274,7 +295,7 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
   Future<void> _carregarDisciplinasDoHub() async {
     final snapshot = await FirebaseFirestore.instance
         .collection('disciplinas')
-        .where('isVerificada', isEqualTo: true) // Puxa só as aprovadas!
+        .where('isVerificada', isEqualTo: true) // 👀 OLHA AQUI!
         .get();
     
     if (mounted) {
@@ -419,13 +440,16 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
 
       setState(() {
         _disciplinas.add(_disciplinaPreview!);
+        // 🟢 Salva a Turma (Ex: Turma 8) apenas na memória visual da tela!
+        _turmasLocais[_disciplinaPreview!.id] = _turmaPreview!; 
+
         _disciplinaPreview = null;
         _turmaPreview = null;
         _turmaCtrl.clear();
-        _teveInteracao = true;   // Garante que o reset continue aparecendo
-        _gradeModificada = true; // 🟢 AGORA SIM o botão vira "SALVAR"
+        _teveInteracao = true;   
+        _gradeModificada = true; 
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina adicionada à grade!')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Adicionada à pré-visualização!')));
     }
   }
   
@@ -586,8 +610,6 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
         List<Widget> buildBlocosDasDisciplinas() {
           List<Widget> blocos = [];
           void posicionarBlocos(Disciplina d, Turma t, bool isPreview) {
-            
-            // 🟢 MÁGICA DO REGEX: Separa Letras (PQI) e Números (3305)
             String codigoPuro = d.codigo.trim().toUpperCase();
             String sigla = codigoPuro.replaceAll(RegExp(r'[0-9]'), '');
             String numeros = codigoPuro.replaceAll(RegExp(r'[^0-9]'), '');
@@ -603,27 +625,33 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
               double top = _espacoTopoAntesDo7 + ((startMin - (horaInicio * 60)) / 60) * rowHeight;
               double height = ((endMin - startMin) / 60) * rowHeight;
               
-              // 🟢 CENTRALIZAÇÃO EXATA DOS BLOCOS E LARGURA CONTROLÁVEL
               double leftCentro = leftOffset + (diaIndex * columnWidth);
               double blockWidth = _larguraDosBlocosGrade; 
               double leftPos = leftCentro + (columnWidth - blockWidth) / 2;
 
-              Widget conteudoTexto = Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    sigla, 
-                    style: TextStyle(fontFamily: 'Aristotelica', fontWeight: _pesoSiglaBloco, fontSize: _tamanhoSiglaBloco, color: Colors.white, height: 1.0, shadows: isPreview ? [Shadow(color: d.cor.withOpacity(0.8), blurRadius: 2)] : null),
-                    textAlign: TextAlign.center,
+              Widget conteudoTexto = Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        sigla, 
+                        style: TextStyle(fontFamily: 'Aristotelica', fontWeight: _pesoSiglaBloco, fontSize: _tamanhoSiglaBloco, color: Colors.white, height: 1.0, shadows: isPreview ? [Shadow(color: d.cor.withOpacity(0.8), blurRadius: 2)] : null),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (numeros.isNotEmpty) SizedBox(height: _espacoLetrasNumeros),
+                      if (numeros.isNotEmpty) Text(
+                        numeros, 
+                        style: TextStyle(fontFamily: 'Aristotelica', fontWeight: _pesoNumeroBloco, fontSize: _tamanhoNumeroBloco, color: Colors.white, height: 1.0, shadows: isPreview ? [Shadow(color: d.cor.withOpacity(0.8), blurRadius: 2)] : null),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
-                  if (numeros.isNotEmpty) SizedBox(height: _espacoLetrasNumeros),
-                  if (numeros.isNotEmpty) Text(
-                    numeros, 
-                    style: TextStyle(fontFamily: 'Aristotelica', fontWeight: _pesoNumeroBloco, fontSize: _tamanhoNumeroBloco, color: Colors.white, height: 1.0, shadows: isPreview ? [Shadow(color: d.cor.withOpacity(0.8), blurRadius: 2)] : null),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+                ),
               );
 
               Widget box;
@@ -636,9 +664,42 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
                   child: Center(child: conteudoTexto),
                 );
               } else {
-                box = Container(
-                  decoration: BoxDecoration(color: d.cor, borderRadius: BorderRadius.circular(6.0)),
-                  child: Center(child: conteudoTexto),
+                // 🟢 NOVA LÓGICA DA LIXEIRA
+                bool isLixeira = _disciplinaAguardandoExclusao == d.id;
+
+                box = GestureDetector(
+                  onTap: () {
+                    if (isLixeira) {
+                      // Se apertar de novo na lixeira, deleta da memória visual da tela
+                      setState(() {
+                        _disciplinas.removeWhere((disc) => disc.id == d.id);
+                        _turmasLocais.remove(d.id);
+                        _disciplinaAguardandoExclusao = null;
+                        _gradeModificada = true;
+                        _teveInteracao = true;
+                      });
+                    } else {
+                      // Se apertar no bloco normal, revela a lixeira e esconde depois de 3s
+                      setState(() { _disciplinaAguardandoExclusao = d.id; });
+                      Future.delayed(const Duration(seconds: 3), () {
+                        if (mounted && _disciplinaAguardandoExclusao == d.id) {
+                          setState(() => _disciplinaAguardandoExclusao = null);
+                        }
+                      });
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      color: isLixeira ? const Color(0xFFE04F44) : d.cor,
+                      borderRadius: BorderRadius.circular(6.0)
+                    ),
+                    child: Center(
+                      child: isLixeira
+                          ? Image.asset('assets/images/lixeira_icon.png', color: Colors.white, width: 24, height: 24)
+                          : conteudoTexto,
+                    ),
+                  ),
                 );
               }
 
@@ -646,15 +707,20 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
             }
           }
 
+          // 🟢 O FIM DO FANTASMA DA TURMA 1: Ele agora só desenha o que é real!
+          final user = context.read<UserProvider>().currentUser;
+          // 🟢 Desenha a grade lendo estritamente a memória de rascunho
           for (var d in _disciplinas) {
-            if (d.turmas.isNotEmpty) posicionarBlocos(d, d.turmas.first, false);
+            if (_turmasLocais.containsKey(d.id)) {
+              posicionarBlocos(d, _turmasLocais[d.id]!, false);
+            }
           }
           if (_disciplinaPreview != null && _turmaPreview != null) {
             posicionarBlocos(_disciplinaPreview!, _turmaPreview!, true);
           }
 
           return blocos;
-        }
+        } // 🟢 Fim do buildBlocosDasDisciplinas()
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -701,7 +767,6 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
                                       width: _larguraColunaHoras,
                                       child: Text('${horaInicio + index}', style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoFonteHoras, color: const Color(0xFFBCBEBF), height: 1.0), textAlign: TextAlign.center),
                                     ),
-                                    // 🟢 CONTROLE DA LINHA: Adicionados os recuos esquerdo e direito para alinhar com a caixa
                                     SizedBox(width: _distanciaHoraLinha + _recuoLinhaEsquerda),
                                     Expanded(
                                       child: Padding(
@@ -1037,13 +1102,30 @@ class _EditGradePageState extends State<EditGradePage> with SingleTickerProvider
                   SizedBox(
                     width: 95.0, height: 40.0,
                     child: GestureDetector(
-                      onTap: () async { // 🟢 TRANSFORMADO EM ASYNC
+                      onTap: () async { 
                         if (_gradeModificada) {
-                          // 🟢 MÁGICA: Inscreve o aluno nas novas disciplinas que ele puxou pra grade!
-                          for (var novaDisc in _disciplinas) {
-                            // Se a disciplina não estava na grade inicial, inscreve no Firebase
-                            if (!widget.initialDisciplinas.any((d) => d.id == novaDisc.id)) {
-                              await FirestoreService().inscreverEmDisciplina(novaDisc.id);
+                          final user = context.read<UserProvider>().currentUser;
+                          if (user != null) {
+                            // 🟢 1. NOVA LÓGICA: Desmatricular das disciplinas que foram removidas da grade
+                            for (var discInicial in widget.initialDisciplinas) {
+                              if (!_disciplinas.any((d) => d.id == discInicial.id)) {
+                                // Remove da memória do celular e do Firebase
+                                user.turmasIds.removeWhere((id) => discInicial.turmas.any((t) => t.id == id));
+                                await FirestoreService().desmatricularDeDisciplina(discInicial.id);
+                              }
+                            }
+
+                            // 🟢 2. A MÁGICA ORIGINAL: Salva as novas matrículas
+                            for (var novaDisc in _disciplinas) {
+                              if (!widget.initialDisciplinas.any((d) => d.id == novaDisc.id)) {
+                                // Pega a turma que estava na memória do rascunho
+                                String turmaId = _turmasLocais[novaDisc.id]?.id ?? novaDisc.turmas.first.id;
+                                
+                                // 1. Avisa o celular na hora (Pro Júpiter atualizar instantaneamente)
+                                user.turmasIds.add(turmaId);
+                                // 2. Avisa o Firebase
+                                await FirestoreService().matricular(novaDisc.id, turmaId);
+                              }
                             }
                           }
                           

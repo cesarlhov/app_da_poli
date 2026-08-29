@@ -1,6 +1,6 @@
 // lib/models/user_model.dart
 
-enum UserRole { aluno, representante, gremio, admin }
+enum UserRole { aluno, representante, gremio, admin, chov } // 🟢 Adicionamos o chov aqui
 
 class UserModel {
   final String uid;
@@ -11,13 +11,13 @@ class UserModel {
   final String? telefone; 
   final String curso;
   final String? fotoUrl; 
-  
-  // 🟢 NOVO: Campo explícito de cargo para o Painel de Administração
   final UserRole role; 
   
-  // Hierarquia e Poderes
-  final bool isGremio; 
-  final bool isRC;     
+  // 🔥 HIERARQUIA SUPREMA (Calculada Automaticamente)
+  // Se o role for chov, ele automaticamente ganha todos os poderes abaixo dele.
+  bool get isChov => role == UserRole.chov || role == UserRole.admin;
+  bool get isGremio => isChov || role == UserRole.gremio;
+  bool get isRC => isGremio || role == UserRole.representante;
   
   // Listas de Conexão
   final List<String> turmasGerenciadas; 
@@ -42,9 +42,7 @@ class UserModel {
     this.telefone,
     required this.curso,
     this.fotoUrl, 
-    this.role = UserRole.aluno, // 🟢 Inicializado aqui
-    this.isGremio = false,
-    this.isRC = false,
+    this.role = UserRole.aluno, 
     this.turmasGerenciadas = const [],
     this.turmasIds = const [],
     this.amigosIds = const [],
@@ -55,8 +53,8 @@ class UserModel {
     this.visibilidadePerfil = 'publico',
   });
 
-  // 🟢 Função auxiliar para converter o texto do Firebase em Enum
   static UserRole _parseRole(String? roleStr) {
+    if (roleStr == 'chov') return UserRole.chov;
     if (roleStr == 'admin') return UserRole.admin;
     if (roleStr == 'gremio') return UserRole.gremio;
     if (roleStr == 'representante') return UserRole.representante;
@@ -64,6 +62,13 @@ class UserModel {
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map, String documentId) {
+    // Para retrocompatibilidade caso ainda exista isGremio como booleano no banco antigo
+    UserRole detectedRole = _parseRole(map['role']);
+    if (detectedRole == UserRole.aluno) {
+      if (map['isGremio'] == true) detectedRole = UserRole.gremio;
+      else if (map['isRC'] == true) detectedRole = UserRole.representante;
+    }
+
     return UserModel(
       uid: documentId,
       nomeCompleto: map['nomeCompleto'] ?? map['nome'] ?? '',
@@ -73,9 +78,7 @@ class UserModel {
       telefone: map['telefone'],
       curso: map['curso'] ?? 'Não informado',
       fotoUrl: map['fotoUrl'], 
-      role: _parseRole(map['role']), // 🟢 Mapeado aqui
-      isGremio: map['isGremio'] ?? (map['role'] == 'gremio' || map['role'] == 'admin'),
-      isRC: map['isRC'] ?? (map['role'] == 'representante'),
+      role: detectedRole, 
       turmasGerenciadas: List<String>.from(map['turmasGerenciadas'] ?? []),
       turmasIds: List<String>.from(map['turmasIds'] ?? []),
       amigosIds: List<String>.from(map['amigosIds'] ?? []),
@@ -96,7 +99,8 @@ class UserModel {
       'telefone': telefone,
       'curso': curso,
       'fotoUrl': fotoUrl, 
-      'role': role.name, // 🟢 Salva o cargo corretamente
+      'role': role.name, 
+      // Salvamos os booleanos também apenas para facilitar queries diretas no Firebase se você precisar buscar "where isGremio == true"
       'isGremio': isGremio,
       'isRC': isRC,
       'turmasGerenciadas': turmasGerenciadas,

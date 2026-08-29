@@ -25,6 +25,7 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
   bool _isGradeShrunk = false;
 
   final ScrollController _scrollController = ScrollController();
+  final ValueNotifier<double> _scrollOffsetNotifier = ValueNotifier<double>(0.0);
 
   final double _paddingLateralTela = 15.0; 
   final double _headerPaddingTop = 16.0;
@@ -54,7 +55,7 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
   final double _espacoBaseSemFooter = 18.0; 
 
   final double _distanciaMinigradeProHoje = 8.0; 
-  final double _distanciaHojeProsCards = 12.0;    
+  final double _distanciaHojeProsCards = 8.0;    
   
   final double _tamanhoHoje = 16.0;
   final Color _corHoje = const Color(0xFF162038); 
@@ -78,7 +79,7 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
   final double _intervaloMarginBottom = 8.0; 
   final double _intervaloMarginLateral = 0.0; 
 
-  final Color _intervaloCorTexto = const Color(0xFF999DA4);
+  final Color _intervaloCorTexto = const Color(0xFFB1B5BD);
   
   final Color _intervaloCorBorda = const Color(0xFFBFC5D1); 
   final Color _intervaloCorFundo = const Color(0xFFDEE2EC).withOpacity(0.5); 
@@ -101,7 +102,8 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
   @override
   void dispose() {
     _shrinkController.dispose();
-    _scrollController.dispose(); 
+    _scrollController.dispose();
+    _scrollOffsetNotifier.dispose(); 
     super.dispose();
   }
 
@@ -115,21 +117,17 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
     return 'BOA NOITE';
   }
 
-  // 🟢 Lógica avançada para buscar aulas de QUALQUER dia no futuro
   List<Disciplina> _getAulasDoDia(List<Disciplina> todasAsDisciplinas, UserModel user, int offsetDias) {
-    if (todasAsDisciplinas.isEmpty) return [];
-
-    final dataAlvo = DateTime.now().add(Duration(days: offsetDias));
-    const mapDias = {1: 'SEGUNDA', 2: 'TERÇA', 3: 'QUARTA', 4: 'QUINTA', 5: 'SEXTA', 6: 'SÁBADO', 7: 'DOMINGO'};
-    final diaStr = mapDias[dataAlvo.weekday] ?? '';
-    if (diaStr.isEmpty) return [];
-
     List<Disciplina> aulasDia = [];
+    final targetDate = DateTime.now().add(Duration(days: offsetDias));
+    const mapDias = {1: 'SEGUNDA', 2: 'TERÇA', 3: 'QUARTA', 4: 'QUINTA', 5: 'SEXTA', 6: 'SÁBADO', 7: 'DOMINGO'};
+    final diaStr = mapDias[targetDate.weekday] ?? '';
 
+    // 🟢 LIMITA PARA LER APENAS A TURMA EM QUE ELE ESTÁ INSCRITO NO BANCO DE DADOS
     for (var d in todasAsDisciplinas) {
       var turmasDoAluno = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
-      if (turmasDoAluno.isEmpty) turmasDoAluno = d.turmas; 
-      
+      if (turmasDoAluno.isEmpty) continue; // Pula se não for a turma dele!
+
       bool temAula = false;
       for (var t in turmasDoAluno) {
         if (t.horarios.any((h) => h.dia == diaStr)) {
@@ -143,21 +141,27 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
     aulasDia.sort((a, b) {
       int getEarliest(Disciplina d) {
         int minTime = 1440; 
-        var turmas = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
-        if (turmas.isEmpty) turmas = d.turmas;
-        for (var t in turmas) {
+        var turmasDoAluno = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
+        if (turmasDoAluno.isEmpty) return minTime;
+
+        for (var t in turmasDoAluno) {
           for (var h in t.horarios) {
             if (h.dia == diaStr) {
+              // 🟢 A conversão de horas feita manualmente aqui para não dar erro
+              int tMin = 0;
               try {
                 final parts = h.inicio.split(':');
-                final time = int.parse(parts[0]) * 60 + int.parse(parts[1]);
-                if (time < minTime) minTime = time;
-              } catch (e) {}
+                tMin = int.parse(parts[0].trim()) * 60 + int.parse(parts[1].trim());
+              } catch (e) {
+                tMin = 0;
+              }
+              if (tMin < minTime) minTime = tMin;
             }
           }
         }
         return minTime;
       }
+
       return getEarliest(a).compareTo(getEarliest(b));
     });
 
@@ -220,35 +224,48 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
       backgroundColor: const Color(0xFFF0F0F0),
       body: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          controller: _scrollController,
-          slivers: [
-            SliverToBoxAdapter(child: _buildIdentidadeHeader(user, animateThisTime, currentGreeting)),
-            SliverPersistentHeader(
-              pinned: true, 
-              delegate: _GradeMinimalistaDelegate(
-                disciplinas: disciplinas, slidableGradeKey: _slidableGradeKey, onGradeEdited: () {},
-                paddingLateral: _paddingLateralTela, shrinkAnimationValue: _shrinkController.value, 
-                distanciaTeto: _distanciaTetoQuandoFixado, espacoGradeAteArraste: _espacoGradeAteArraste, 
-                espacoArrasteAteBase: _espacoArrasteAteBase, espacoBaseSemFooter: _espacoBaseSemFooter, 
-                onShrink: () { if (mounted) { _shrinkController.forward(); _isGradeShrunk = true; } },
+        // 🟢 A MÁGICA: Ouve a tela inteira, seja toque ou mudança de layout!
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (ScrollNotification notification) {
+            if (notification.metrics.axis == Axis.vertical) {
+              // O addPostFrameCallback evita que o app trave se tentar atualizar a linha enquanto o card ainda está no meio da animação de encolher
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _scrollOffsetNotifier.value = notification.metrics.pixels;
+              });
+            }
+            return false;
+          },
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              SliverToBoxAdapter(child: _buildIdentidadeHeader(user, animateThisTime, currentGreeting)),
+              SliverPersistentHeader(
+                pinned: true, 
+                delegate: _GradeMinimalistaDelegate(
+                  disciplinas: disciplinas, turmasIds: user.turmasIds, slidableGradeKey: _slidableGradeKey, onGradeEdited: () {},
+                  paddingLateral: _paddingLateralTela, shrinkAnimationValue: _shrinkController.value, 
+                  distanciaTeto: _distanciaTetoQuandoFixado, espacoGradeAteArraste: _espacoGradeAteArraste, 
+                  espacoArrasteAteBase: _espacoArrasteAteBase, espacoBaseSemFooter: _espacoBaseSemFooter, 
+                  onShrink: () { if (mounted) { _shrinkController.forward(); _isGradeShrunk = true; } },
+                ),
               ),
-            ),
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _StickyHojeDelegate(
-                paddingLateral: _paddingLateralTela, distanciaMinigradeProHoje: _distanciaMinigradeProHoje,
-                tamanhoHoje: _tamanhoHoje, corHoje: _corHoje, tamanhoDiaSemana: _tamanhoDiaSemana,
-                corDiaSemana: _corDiaSemanaEClasse, distanciaHojeProDia: _distanciaHojeProDia,
-                tamanhoAcessarClasse: _tamanhoAcessarClasse, distanciaHojeProsCards: _distanciaHojeProsCards,
-                
-                diaSemana: diaSemanaStr, // 🟢 Apenas passa o dia atual novamente
-                scrollController: _scrollController, 
-                extensaoLinhaCards: _extensaoLinhaCards, espessuraLinhaCards: _espessuraLinhaCards,
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _StickyHojeDelegate(
+                  paddingLateral: _paddingLateralTela, distanciaMinigradeProHoje: _distanciaMinigradeProHoje,
+                  tamanhoHoje: _tamanhoHoje, corHoje: _corHoje, tamanhoDiaSemana: _tamanhoDiaSemana,
+                  corDiaSemana: _corDiaSemanaEClasse, distanciaHojeProDia: _distanciaHojeProDia,
+                  tamanhoAcessarClasse: _tamanhoAcessarClasse, distanciaHojeProsCards: _distanciaHojeProsCards,
+                  diaSemana: diaSemanaStr, 
+                  
+                  // 🟢 PASSA O NOVO OUVINTE PARA A LINHA CINZA EM VEZ DO SCROLL CONTROLLER
+                  scrollOffsetNotifier: _scrollOffsetNotifier, 
+                  extensaoLinhaCards: _extensaoLinhaCards, espessuraLinhaCards: _espessuraLinhaCards,
+                ),
               ),
-            ),
-            SliverToBoxAdapter(child: _buildFeedInteligente(disciplinas, user)),
-          ],
+              SliverToBoxAdapter(child: _buildFeedInteligente(disciplinas, user)),
+            ],
+          ),
         ),
       ),
     );
@@ -297,12 +314,33 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
     );
   }
 
-  // 🟢 O NOVO FEED INTELIGENTE (Design Atualizado e Proporcional)
+  // 🟢 FUNÇÃO AUXILIAR: Pega o tempo de início e fim da aula do dia para calcular o intervalo
+  (int, int)? _getAulaTimes(Disciplina d, UserModel user, String diaStr) {
+    var turmasDoAluno = d.turmas.where((t) => user.turmasIds.contains(t.id)).toList();
+    if (turmasDoAluno.isEmpty) return null;
+    for (var t in turmasDoAluno) {
+      for (var h in t.horarios) {
+        if (h.dia == diaStr) {
+          try {
+            final pI = h.inicio.split(':');
+            final pF = h.fim.split(':');
+            int start = int.parse(pI[0].trim()) * 60 + int.parse(pI[1].trim());
+            int end = int.parse(pF[0].trim()) * 60 + int.parse(pF[1].trim());
+            return (start, end);
+          } catch (e) { return null; }
+        }
+      }
+    }
+    return null;
+  }
+
+  // 🟢 O NOVO FEED INTELIGENTE (Design Atualizado, Estado Vazio e Intervalos)
   Widget _buildFeedInteligente(List<Disciplina> disciplinas, UserModel user) {
     return GestureDetector(
       onTap: () => _slidableGradeKey.currentState?.closeMenu(),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(_paddingLateralTela, 16, _paddingLateralTela, 160.0),
+        // 🟢 ESPAÇO BRANCO NO TOPO (6.0) para os cards passarem suavemente debaixo da linha cinza
+        padding: EdgeInsets.fromLTRB(_paddingLateralTela, 6.0, _paddingLateralTela, 115.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -316,56 +354,129 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
               final isAmanha = offset == 1;
               String tituloBloco = isHoje ? 'HOJE' : (isAmanha ? 'AMANHÃ' : diaStr);
 
-              final estiloTituloFeed = const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w900, fontFamily: 'LeagueSpartan', color: Color(0xFF162038));
+              // 🟢 NOVO ESTILO DOS TÍTULOS: (Aristotelica w700), mas com cor Cinza
+              final estiloTituloFeed = const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w700, fontFamily: 'Aristotelica', color: Color(0xFFBCBEBF));
 
-              // 🟢 ESTADO VAZIO: Sábado/Domingo sem aula e sem avançar ainda
+              // 🟢 ESTADO VAZIO: Quando não há aulas hoje
               if (aulas.isEmpty && isHoje && _diasExibidos.length == 1) {
                 return [
-                  // 🟢 ERRO CONSERTADO: A linha que imprimia o título "HOJE" foi apagada daqui!
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 40.0),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          const Text('Nenhuma aula hoje. Aproveite!', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey)),
-                          const SizedBox(height: 20),
-                          // 🟢 BOTÃO MINIMALISTA
-                          GestureDetector(
-                            onTap: () => _carregarProximoDiaComAula(disciplinas, user),
-                            child: const Text('CARREGAR PRÓXIMAS >', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16.0, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF))),
-                          )
-                        ]
-                      )
+                    padding: const EdgeInsets.symmetric(vertical: 0.0),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: 70,
+                          width: double.infinity,
+                          child: DottedContainer(
+                            color: _intervaloCorFundo,
+                            borderColor: _intervaloCorBorda,
+                            strokeWidth: _intervaloEspessuraBorda,
+                            dashPattern: const [2.0, 2.0],
+                            borderRadius: BorderRadius.circular(6.0), 
+                            child: const Center(
+                              child: Text(
+                                'NENHUMA AULA HOJE - APROVEITE PARA ESTUDAR',
+                                style: TextStyle(fontFamily: 'Aristotelica', fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFB1B5BD)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 7.0), // 🟢 Menor distância até o botão
+                        GestureDetector(
+                          onTap: () => _carregarProximoDiaComAula(disciplinas, user),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('CARREGAR PRÓXIMOS DIAS', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16.0, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF))),
+                              const SizedBox(width: 8),
+                              // 🟢 Símbolo deslocado 2 pixels para cima
+                              Transform.translate(
+                                offset: const Offset(0, -2),
+                                child: Image.asset('assets/images/carregarseguinte_icon.png', height: 20, color: const Color(0xFFBCBEBF)),
+                              ),
+                            ],
+                          ),
+                        )
+                      ]
                     )
                   )
                 ];
               }
 
-              // 🟢 FEED NORMAL DO DIA
+              // 🟢 FEED NORMAL DO DIA (Com Aulas e Intervalos)
               bool isHojeGrupo = tituloBloco.toUpperCase().contains('HOJE');
+              List<Widget> diaWidgets = [];
 
-              return [
-                // SÓ MOSTRA O TÍTULO SE NÃO FOR O GRUPO DE HOJE!
-                if (!isHojeGrupo) ...[
-                   Text(tituloBloco, style: estiloTituloFeed),
-                   const SizedBox(height: 10),
-                ],
-                
-                // Mostra os cards das aulas normalmente
-                ...aulas.map((aula) => AulaCard(disciplina: aula)),
-                
-                const SizedBox(height: 24), // Espaço no final do grupo
-              ];
+              if (!isHojeGrupo) {
+                 diaWidgets.add(Text(tituloBloco, style: estiloTituloFeed));
+                 diaWidgets.add(const SizedBox(height: 12)); 
+              }
+
+              for (int i = 0; i < aulas.length; i++) {
+                diaWidgets.add(AulaCard(
+                  disciplina: aulas[i],
+                  dataAlvo: dataAlvo,
+                  idUnico: '${aulas[i].id}_$offset', 
+                ));
+
+                // 🟢 LÓGICA DO CARD DE INTERVALO PONTILHADO
+                if (i < aulas.length - 1) {
+                  var currentTimes = _getAulaTimes(aulas[i], user, diaStr);
+                  var nextTimes = _getAulaTimes(aulas[i+1], user, diaStr);
+                  
+                  if (currentTimes != null && nextTimes != null) {
+                    if (nextTimes.$1 > currentTimes.$2) {
+                      diaWidgets.add(
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8.0),
+                          height: _intervaloAltura,
+                          width: double.infinity,
+                          child: DottedContainer(
+                            color: _intervaloCorFundo,
+                            borderColor: _intervaloCorBorda,
+                            strokeWidth: _intervaloEspessuraBorda,
+                            dashPattern: const [2.0, 2.0],
+                            borderRadius: BorderRadius.circular(6.0), 
+                            child: Center(
+                              child: Text(
+                                'INTERVALO - APROVEITE PARA ESTUDAR',
+                                style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16, fontWeight: FontWeight.w700, color: _intervaloCorTexto),
+                              ),
+                            ),
+                          ),
+                        )
+                      );
+                    }
+                  }
+                }
+              }
+              
+              // 🟢 Distância farta entre o último card do dia atual e o título do próximo dia (ex: AMANHÃ)
+              diaWidgets.add(const SizedBox(height: 7.0)); 
+
+              return diaWidgets;
             }),
 
-            // 🟢 BOTÃO DE CARREGAR MAIS AO FINAL DA LISTA (MINIMALISTA)
+            // 🟢 BOTÃO DE CARREGAR MAIS AO FINAL DA LISTA
             if (_diasExibidos.isNotEmpty && !(_diasExibidos.length == 1 && _getAulasDoDia(disciplinas, user, _diasExibidos.first).isEmpty))
               Center(
                 child: GestureDetector(
                   onTap: () => _carregarProximoDiaComAula(disciplinas, user),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
-                    child: Text('CARREGAR MAIS >', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16.0, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF))),
+                  child: Padding(
+                    // 🟢 Distância entre o último card e o botão
+                    padding: const EdgeInsets.only(top: 12.0, bottom: 24.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('CARREGAR PRÓXIMOS DIAS', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16.0, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF))),
+                        const SizedBox(width: 8),
+                        // 🟢 Símbolo deslocado 2 pixels para cima
+                        Transform.translate(
+                          offset: const Offset(0, -2),
+                          child: Image.asset('assets/images/carregarseguinte_icon.png', height: 20, color: const Color(0xFFBCBEBF)),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               )
@@ -378,6 +489,7 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
 
 class _GradeMinimalistaDelegate extends SliverPersistentHeaderDelegate {
   final List<Disciplina> disciplinas;
+  final List<String> turmasIds; // 🟢 NOVO: Recebe as turmas do aluno
   final GlobalKey<SlidableGradePreviewState> slidableGradeKey;
   final VoidCallback onGradeEdited;
   final double paddingLateral;
@@ -390,6 +502,7 @@ class _GradeMinimalistaDelegate extends SliverPersistentHeaderDelegate {
 
   _GradeMinimalistaDelegate({
     required this.disciplinas, 
+    required this.turmasIds, // 🟢 NOVO
     required this.slidableGradeKey, 
     required this.onGradeEdited,
     required this.paddingLateral,
@@ -401,14 +514,18 @@ class _GradeMinimalistaDelegate extends SliverPersistentHeaderDelegate {
     required this.onShrink,
   });
 
-  // 🟢 LENTE INTELIGENTE: Puxa o menor e o maior horário vasculhando as Turmas
+  // 🟢 LENTE INTELIGENTE: Puxa o menor e o maior horário vasculhando APENAS suas Turmas
   double _calculateHeight(double scrollPercentage) {
     int minMins = 450; 
     int maxMins = 1000; 
     bool hasLunchAny = false;
 
     for (var d in disciplinas) {
-      for (var t in d.turmas) {
+      // 🟢 CORREÇÃO: Filtra para calcular o tamanho usando apenas a sua turma!
+      var turmasValidas = d.turmas.where((t) => turmasIds.contains(t.id)).toList();
+      if (turmasValidas.isEmpty) turmasValidas = d.turmas;
+
+      for (var t in turmasValidas) {
         for (var h in t.horarios) {
           if (h.inicio.isEmpty || !h.inicio.contains(':') || h.fim.isEmpty || !h.fim.contains(':')) continue;
 
@@ -477,6 +594,7 @@ class _GradeMinimalistaDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _GradeMinimalistaDelegate oldDelegate) => 
       disciplinas != oldDelegate.disciplinas || 
+      turmasIds != oldDelegate.turmasIds || // 🟢 NOVO
       paddingLateral != oldDelegate.paddingLateral || 
       shrinkAnimationValue != oldDelegate.shrinkAnimationValue;
 }
@@ -491,9 +609,10 @@ class _StickyHojeDelegate extends SliverPersistentHeaderDelegate {
   final double distanciaHojeProDia;
   final double tamanhoAcessarClasse;
   final double distanciaHojeProsCards;
-  final String diaSemana; // Somente o diaSemana foi mantido!
+  final String diaSemana; 
 
-  final ScrollController scrollController;
+  // 🟢 A classe agora recebe o nosso Ouvinte de Tela inteligente!
+  final ValueNotifier<double> scrollOffsetNotifier; 
   final double extensaoLinhaCards;
   final double espessuraLinhaCards;
 
@@ -508,7 +627,7 @@ class _StickyHojeDelegate extends SliverPersistentHeaderDelegate {
     required this.tamanhoAcessarClasse,
     required this.distanciaHojeProsCards,
     required this.diaSemana,
-    required this.scrollController,
+    required this.scrollOffsetNotifier, // 🟢 Atualizado aqui
     required this.extensaoLinhaCards,
     required this.espessuraLinhaCards,
   });
@@ -534,7 +653,6 @@ class _StickyHojeDelegate extends SliverPersistentHeaderDelegate {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      // 🟢 VOLTOU PARA 'HOJE' FIXO COM A COR FORTE!
                       Text('HOJE', style: TextStyle(fontFamily: 'LeagueSpartan', fontSize: tamanhoHoje, fontWeight: FontWeight.w900, color: corHoje, height: 1.0)),
                       SizedBox(width: distanciaHojeProDia),
                       Text('/ $diaSemana', style: TextStyle(fontFamily: 'Aristotelica', fontSize: tamanhoDiaSemana, fontWeight: FontWeight.w700, color: corDiaSemana, height: 1.0)),
@@ -548,18 +666,17 @@ class _StickyHojeDelegate extends SliverPersistentHeaderDelegate {
           
           SizedBox(height: distanciaHojeProsCards),
           
-          AnimatedBuilder(
-            animation: scrollController,
-            builder: (context, child) {
-              double scrollVal = 0.0;
-              if (scrollController.hasClients) {
-                scrollVal = scrollController.offset;
-              }
+          // 🟢 MÁGICA FINAL: Reage frame a frame ao ouvinte enquanto o card encolhe!
+          ValueListenableBuilder<double>(
+            valueListenable: scrollOffsetNotifier,
+            builder: (context, scrollVal, child) {
+              double val = scrollVal;
+              if (val < 0) val = 0.0; // Continua protegendo contra o "pulo" elástico
 
               double inicioFade = 95.0; 
               double fimFade = inicioFade + 90.0; 
               
-              double opacidadeFadeIn = ((scrollVal - inicioFade) / (fimFade - inicioFade)).clamp(0.0, 1.0);
+              double opacidadeFadeIn = ((val - inicioFade) / (fimFade - inicioFade)).clamp(0.0, 1.0);
               
               return Opacity(
                 opacity: opacidadeFadeIn,
@@ -586,7 +703,7 @@ class _StickyHojeDelegate extends SliverPersistentHeaderDelegate {
   
   @override
   bool shouldRebuild(covariant _StickyHojeDelegate oldDelegate) => 
-      diaSemana != oldDelegate.diaSemana || scrollController != oldDelegate.scrollController;
+      diaSemana != oldDelegate.diaSemana || scrollOffsetNotifier != oldDelegate.scrollOffsetNotifier;
 }
 
 class TextRevealGradient extends StatefulWidget {
