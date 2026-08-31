@@ -70,6 +70,12 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
   final double _espessuraLinhaCards = 4.0; 
 
   // =========================================================================
+  // 🎛️ PAINEL DE CONTROLE - ESTADO VAZIO (NENHUMA AULA HOJE)
+  // =========================================================================
+  final double _alturaBlocoSemAula = 50.0; // Edite a altura do bloco pontilhado aqui
+  final double _distanciaBlocoSemAulaParaBotao = 20.0; // Edite a distância do bloco até o botão aqui
+
+  // =========================================================================
   // 🎛️ PAINEL DE CONTROLE - CARD DE INTERVALO (Estilo Minigrade)
   // =========================================================================
   final double _intervaloTamanhoTexto = 15.0;
@@ -365,7 +371,7 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
                     child: Column(
                       children: [
                         SizedBox(
-                          height: 70,
+                          height: _alturaBlocoSemAula, // ✅ AQUI: Usando a nova variável de altura
                           width: double.infinity,
                           child: DottedContainer(
                             color: _intervaloCorFundo,
@@ -376,12 +382,12 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
                             child: const Center(
                               child: Text(
                                 'NENHUMA AULA HOJE - APROVEITE PARA ESTUDAR',
-                                style: TextStyle(fontFamily: 'Aristotelica', fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFB1B5BD)),
+                                style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFFB1B5BD)),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 7.0), // 🟢 Menor distância até o botão
+                        SizedBox(height: _distanciaBlocoSemAulaParaBotao), // ✅ AQUI: Usando a nova variável de distância
                         GestureDetector(
                           onTap: () => _carregarProximoDiaComAula(disciplinas, user),
                           child: Row(
@@ -389,7 +395,6 @@ class _JupiterPageState extends State<JupiterPage> with SingleTickerProviderStat
                             children: [
                               const Text('CARREGAR PRÓXIMOS DIAS', style: TextStyle(fontFamily: 'Aristotelica', fontSize: 16.0, fontWeight: FontWeight.w700, color: Color(0xFFBCBEBF))),
                               const SizedBox(width: 8),
-                              // 🟢 Símbolo deslocado 2 pixels para cima
                               Transform.translate(
                                 offset: const Offset(0, -2),
                                 child: Image.asset('assets/images/carregarseguinte_icon.png', height: 20, color: const Color(0xFFBCBEBF)),

@@ -66,7 +66,7 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
     }
   }
 
-  @override
+ @override
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserProvider>();
     final currentUser = userProvider.currentUser;
@@ -96,110 +96,118 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
             itemCount: disciplinas.length,
             itemBuilder: (context, index) {
               final disciplina = disciplinas[index];
-              // Checa dinamicamente se qualquer id das turmas do aluno bate com alguma turma dessa disciplina
               final bool jaInscrito = currentUser.turmasIds.any((idTurma) => disciplina.turmas.any((t) => t.id == idTurma));
 
-              return Card(
-                elevation: 3,
-                margin: const EdgeInsets.only(bottom: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => DisciplinaDetailsPage(disciplina: disciplina))),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // 🟢 HERO ADICIONADO AQUI: Ele entende de onde a tela tem que pular
+              return Hero(
+                tag: 'hero_hub_${disciplina.id}',
+                flightShuttleBuilder: (flightContext, animation, flightDirection, fromHeroContext, toHeroContext) {
+                  return Material(type: MaterialType.transparency, child: toHeroContext.widget);
+                },
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Card(
+                    elevation: 3,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      // 🟢 MUDANÇA NA NAVEGAÇÃO
+                      onTap: () => DisciplinaDetailsPage.abrir(context, disciplina, 'hero_hub_${disciplina.id}'),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(color: disciplina.cor.withAlpha(50), borderRadius: BorderRadius.circular(8)),
-                              child: Text(disciplina.codigo, style: TextStyle(color: disciplina.cor, fontWeight: FontWeight.bold)),
-                            ),
                             Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                if (disciplina.isVerificada)
-                                  const Icon(Icons.verified, color: Colors.blue, size: 22)
-                                else ...[
-                                  const Icon(Icons.pending_actions, color: Colors.orange, size: 22),
-                                  if (currentUser.isGremio)
-                                    IconButton(
-                                      icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 26),
-                                      tooltip: 'Aprovar Disciplina',
-                                      onPressed: () async {
-                                        await _firestoreService.aprovarDisciplina(disciplina.id);
-                                        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina aprovada!'), backgroundColor: Colors.green));
-                                      },
-                                    ),
-                                ],
-                                if (isAdmin) ...[
-                                  const SizedBox(width: 8),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_note, color: Colors.black87),
-                                    padding: EdgeInsets.zero, constraints: const BoxConstraints(), tooltip: 'Editar',
-                                    onPressed: () {
-                                      Navigator.of(context, rootNavigator: true).push(
-                                        MaterialPageRoute(
-                                          builder: (context) => CriarDisciplinaPage(disciplinaParaEditar: disciplina),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(color: disciplina.cor.withAlpha(50), borderRadius: BorderRadius.circular(8)),
+                                  child: Text(disciplina.codigo, style: TextStyle(color: disciplina.cor, fontWeight: FontWeight.bold)),
+                                ),
+                                Row(
+                                  children: [
+                                    if (disciplina.isVerificada)
+                                      const Icon(Icons.verified, color: Colors.blue, size: 22)
+                                    else ...[
+                                      const Icon(Icons.pending_actions, color: Colors.orange, size: 22),
+                                      if (currentUser.isGremio)
+                                        IconButton(
+                                          icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 26),
+                                          tooltip: 'Aprovar Disciplina',
+                                          onPressed: () async {
+                                            await _firestoreService.aprovarDisciplina(disciplina.id);
+                                            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina aprovada!'), backgroundColor: Colors.green));
+                                          },
                                         ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(width: 12),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                    padding: EdgeInsets.zero, constraints: const BoxConstraints(), tooltip: 'Excluir',
-                                    onPressed: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (ctx) => AlertDialog(
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                          title: const Text('Tem certeza?', style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w900, color: Color(0xFF162038))),
-                                          content: Text('Excluir a disciplina ${disciplina.codigo}?', style: const TextStyle(fontFamily: 'Lato', fontSize: 16)),
-                                          actions: [
-                                            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('CANCELAR', style: TextStyle(fontFamily: 'Aristotelica', color: Colors.grey, fontWeight: FontWeight.w700))),
-                                            TextButton(
-                                              onPressed: () async {
-                                                Navigator.of(ctx).pop(); 
-                                                await _firestoreService.excluirDisciplina(disciplina.id);
-                                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina excluída!'), backgroundColor: Colors.red));
-                                              },
-                                              child: const Text('EXCLUIR', style: TextStyle(fontFamily: 'Aristotelica', color: Colors.red, fontWeight: FontWeight.w700)),
+                                    ],
+                                    if (isAdmin) ...[
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_note, color: Colors.black87),
+                                        padding: EdgeInsets.zero, constraints: const BoxConstraints(), tooltip: 'Editar',
+                                        onPressed: () {
+                                          Navigator.of(context, rootNavigator: true).push(
+                                            MaterialPageRoute(
+                                              builder: (context) => CriarDisciplinaPage(disciplinaParaEditar: disciplina),
                                             ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ]
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(width: 12),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                        padding: EdgeInsets.zero, constraints: const BoxConstraints(), tooltip: 'Excluir',
+                                        onPressed: () {
+                                          showDialog(
+                                            context: context,
+                                            builder: (ctx) => AlertDialog(
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                              title: const Text('Tem certeza?', style: TextStyle(fontFamily: 'LeagueSpartan', fontWeight: FontWeight.w900, color: Color(0xFF162038))),
+                                              content: Text('Excluir a disciplina ${disciplina.codigo}?', style: const TextStyle(fontFamily: 'Lato', fontSize: 16)),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('CANCELAR', style: TextStyle(fontFamily: 'Aristotelica', color: Colors.grey, fontWeight: FontWeight.w700))),
+                                                TextButton(
+                                                  onPressed: () async {
+                                                    Navigator.of(ctx).pop(); 
+                                                    await _firestoreService.excluirDisciplina(disciplina.id);
+                                                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Disciplina excluída!'), backgroundColor: Colors.red));
+                                                  },
+                                                  child: const Text('EXCLUIR', style: TextStyle(fontFamily: 'Aristotelica', color: Colors.red, fontWeight: FontWeight.w700)),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ]
+                                  ],
+                                ),
                               ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(disciplina.nome, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text('Depto: ${disciplina.departamento} • ${disciplina.numeroInscritos} alunos', style: TextStyle(color: Colors.grey[700])),
+                            const SizedBox(height: 16),
+                            
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: null, 
+                                icon: Icon(jaInscrito ? Icons.check_circle : Icons.lock_outline),
+                                label: Text(jaInscrito ? 'Matriculado (Altere na Grade)' : 'Adicione na Editar Grade'),
+                                style: ElevatedButton.styleFrom(
+                                  disabledBackgroundColor: jaInscrito ? Colors.green[100] : Colors.grey[200],
+                                  disabledForegroundColor: jaInscrito ? Colors.green[800] : Colors.grey[500],
+                                ),
+                              ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        Text(disciplina.nome, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text('Depto: ${disciplina.departamento} • ${disciplina.numeroInscritos} alunos', style: TextStyle(color: Colors.grey[700])),
-                        const SizedBox(height: 16),
-                        
-                        // 🟢 BOTÃO DO HUB: Focado apenas em desmatricular!
-                        // 🟢 BOTÃO DO HUB: Agora foca apenas em informar ou enviar para a Grade
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: null, // Desativado, pois a matrícula/desmatrícula foi movida para a Grade
-                            icon: Icon(jaInscrito ? Icons.check_circle : Icons.lock_outline),
-                            label: Text(jaInscrito ? 'Matriculado (Altere na Grade)' : 'Adicione na Editar Grade'),
-                            style: ElevatedButton.styleFrom(
-                              disabledBackgroundColor: jaInscrito ? Colors.green[100] : Colors.grey[200],
-                              disabledForegroundColor: jaInscrito ? Colors.green[800] : Colors.grey[500],
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -210,4 +218,5 @@ class _HubDisciplinasPageState extends State<HubDisciplinasPage> {
       ),
     );
   }
+
 }

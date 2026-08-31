@@ -266,6 +266,33 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
           horData.frequenciaLab = h.frequenciaLab;
           horData.precisaEpi = h.precisaEpi;
           
+          // 🟢 A MÁGICA AQUI: Sincroniza a matemática e as roletas com o texto restaurado!
+          horData.diaIndex = horData.dias.indexOf(h.dia.toUpperCase());
+          if (horData.diaIndex == -1) horData.diaIndex = 0;
+
+          horData.inicioVal = _parseTimeToMins(h.inicio);
+          horData.fimVal = _parseTimeToMins(h.fim);
+
+          // Descarta os controladores antigos da roleta
+          horData.diaScroll.dispose();
+          horData.inicioScroll.dispose();
+          horData.fimScroll.dispose();
+
+          // Cria novas roletas já travadas na posição correta da edição
+          horData.diaScroll = FixedExtentScrollController(initialItem: horData.diaIndex);
+          
+          int roundedInicio10 = (horData.inicioVal / 10).round() * 10;
+          horData.inicioScroll = FixedExtentScrollController(initialItem: (roundedInicio10 - 450) ~/ 10);
+
+          int minFimPermitido = horData.inicioVal + 10;
+          if (minFimPermitido > 1380) minFimPermitido = 1380;
+          int fimRounded10 = (horData.fimVal / 10).round() * 10;
+          int novoIndexFim = (fimRounded10 - minFimPermitido) ~/ 10;
+          if (novoIndexFim < 0) novoIndexFim = 0;
+          
+          horData.fimScroll = FixedExtentScrollController(initialItem: novoIndexFim);
+          // 🟢 FIM DA CORREÇÃO
+
           horData.datasSelecionadas = h.datasCustomizadas.map((dateStr) {
             var parts = dateStr.split('-');
             if(parts.length == 3) return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
@@ -280,18 +307,19 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
             if (!h.epis.contains(def)) horData.epis.add(EpiData(def, false));
           }
           
-          horData.iniciarListeners(); // 🟢 Ativa o ouvinte
+          horData.iniciarListeners(); 
           turmaData.horarios.add(horData);
         }
+        
         if (turmaData.horarios.isEmpty) {
           var hData = HorarioInputData(onUpdate: _atualizarTela);
           hData.iniciarListeners();
           turmaData.horarios.add(hData);
         }
 
-        turmaData.iniciarListeners(); // 🟢 Ativa o ouvinte
-        _turmas.add(turmaData);
-      }
+        turmaData.iniciarListeners();
+        _turmas.add(turmaData); // 🔴 Aqui estava faltando adicionar a turma completa de volta
+      } // 🔴 Aqui faltava fechar a chave do for das turmas
     } else {
       var turmaMestra = TurmaInputData(onUpdate: _atualizarTela);
       turmaMestra.iniciarListeners();
@@ -877,6 +905,11 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                   }
                 }
 
+                String toRoman(int num) {
+                  const romans = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+                  return num < romans.length ? romans[num] : (num + 1).toString();
+                }
+
                 int maxHorarios = turma.horarios.length > tOriginal.horarios.length ? turma.horarios.length : tOriginal.horarios.length;
                 for (int h = 0; h < maxHorarios; h++) {
                   if (h >= turma.horarios.length) {
@@ -902,9 +935,9 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                     var horAntigo = tOriginal.horarios[h];
 
                     bool changedHora = horAtual.diaCtrl.text != horAntigo.dia || horAtual.inicioCtrl.text != horAntigo.inicio || horAtual.fimCtrl.text != horAntigo.fim;
-                    if (changedHora) altTurma.add(_buildAltText('HORÁRIO EDITADO: ERA ${horAntigo.dia} ${horAntigo.inicio}-${horAntigo.fim}'));
+                    if (changedHora) altTurma.add(_buildAltText('HORÁRIO ${toRoman(h)}: ERA ${horAntigo.dia} ${horAntigo.inicio}-${horAntigo.fim}'));
 
-                    if (horAtual.salaCtrl.text.trim() != horAntigo.local) altTurma.add(_buildAltText('LOCAL EDITADO: ERA ${horAntigo.local}'));
+                    if (horAtual.salaCtrl.text.trim() != horAntigo.local) altTurma.add(_buildAltText('LOCAL ${toRoman(h)}: ERA ${horAntigo.local}'));
 
                     if (horAtual.isLaboratorio != horAntigo.isLaboratorio) {
                       altTurma.add(_buildAltText(horAntigo.isLaboratorio ? 'ERA LABORATÓRIO' : 'NÃO ERA LABORATÓRIO'));
@@ -958,7 +991,6 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                       hint: 'EX: 2026101', controller: turma.codigoCtrl, focusNode: turma.codigoFocus, 
                       nextFocus: turma.professores.isNotEmpty ? turma.professores.first.nomeFocus : null, 
                       isModificado: turmaCodigoModificado,
-                      onChanged: (_) => _atualizarTela()
                     ), 
                     SizedBox(height: _espacoInputAteProximoTitulo),
 
@@ -975,7 +1007,7 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                         child: Row(
                           children: [
                             // 🟢 ADICIONADO ONCHANGED
-                            Expanded(child: _buildRealTextField(hint: 'NOME DO PROFESSOR', controller: prof.nomeCtrl, focusNode: prof.nomeFocus, nextFocus: nextFocus, isModificado: isProfNovo, onChanged: (_) => _atualizarTela())),
+                            Expanded(child: _buildRealTextField(hint: 'NOME DO PROFESSOR', controller: prof.nomeCtrl, focusNode: prof.nomeFocus, nextFocus: nextFocus, isModificado: isProfNovo,)),
                             if (turma.professores.length > 1) ...[
                               SizedBox(width: _espacoLixeiraCaixa),
                               GestureDetector(
@@ -1015,7 +1047,36 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
                             Row(
                               children: [
                                 // 🟢 ADICIONADO ONCHANGED
-                                Expanded(child: _buildRealTextField(hint: 'SALA / LOCAL', controller: hor.salaCtrl, focusNode: hor.salaFocus, isModificado: salaModificada, onChanged: (_) => _atualizarTela())),
+                                // COMO DEVE FICAR O CAMPO DA SALA:
+                            Expanded(
+                              child: _buildRealTextField(
+                                hint: 'SALA / LOCAL', 
+                                controller: hor.salaCtrl, 
+                                focusNode: hor.salaFocus, 
+                                isModificado: salaModificada,
+                                onSubmitCustom: () {
+                                  if (hIndex == turma.horarios.length - 1) {
+                                    // É o último horário, cria um novo
+                                    setState(() { 
+                                      var novoHor = HorarioInputData(onUpdate: _atualizarTela); 
+                                      novoHor.iniciarListeners(); 
+                                      turma.horarios.add(novoHor); 
+                                      
+                                      // Foca automaticamente no campo de "DIA" do novo horário após um breve delay
+                                      Future.delayed(const Duration(milliseconds: 100), () {
+                                        novoHor.isDiaTyping = true;
+                                        FocusScope.of(context).requestFocus(novoHor.diaFocus);
+                                      });
+                                    });
+                                  } else {
+                                    // Não é o último, pula para o dia do próximo horário
+                                    var proxHor = turma.horarios[hIndex + 1];
+                                    setState(() => proxHor.isDiaTyping = true);
+                                    FocusScope.of(context).requestFocus(proxHor.diaFocus);
+                                  }
+                                }
+                              )
+                            ),
                                 if (turma.horarios.length > 1) ...[
                                   SizedBox(width: _espacoLixeiraCaixa),
                                   GestureDetector(
@@ -1615,7 +1676,8 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
     TextInputType keyboardType = TextInputType.text,
     FocusNode? nextFocus,
     ValueChanged<String>? onChanged, 
-    List<TextInputFormatter>? inputFormatters, 
+    List<TextInputFormatter>? inputFormatters,
+    VoidCallback? onSubmitCustom
   }) {
     final bool isPreenchido = controller.text.isNotEmpty;
     final bool isMultiline = minLines != null && minLines > 1;
@@ -1636,8 +1698,15 @@ class _CriarDisciplinaPageState extends State<CriarDisciplinaPage> {
         keyboardType: isMultiline ? TextInputType.multiline : keyboardType,
         textInputAction: nextFocus != null ? TextInputAction.next : (isMultiline ? TextInputAction.newline : TextInputAction.done),
         inputFormatters: inputFormatters, 
+        // Substitua o onSubmitted atual por este:
         onSubmitted: (_) { 
-          if (nextFocus != null) { FocusScope.of(context).requestFocus(nextFocus); } else if (!isMultiline) { FocusScope.of(context).unfocus(); } 
+          if (onSubmitCustom != null) {
+            onSubmitCustom();
+          } else if (nextFocus != null) { 
+            FocusScope.of(context).requestFocus(nextFocus); 
+          } else if (!isMultiline) { 
+            FocusScope.of(context).unfocus(); 
+          } 
         },
         style: TextStyle(fontFamily: 'Aristotelica', fontWeight: FontWeight.w700, fontSize: _tamanhoFonteDigitada, color: _corTextoDigitado),
         textAlignVertical: isMultiline ? TextAlignVertical.top : TextAlignVertical.center,

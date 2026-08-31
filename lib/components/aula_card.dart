@@ -258,7 +258,6 @@ class _AulaCardState extends State<AulaCard> with SingleTickerProviderStateMixin
           onTap: () {
             if (!isExpanded) {
               globalExpandedCardId.value = _myCardId; 
-              // Auto-Scroll Suave
               Future.delayed(const Duration(milliseconds: 150), () {
                 if (context.mounted) {
                   Scrollable.ensureVisible(
@@ -271,216 +270,227 @@ class _AulaCardState extends State<AulaCard> with SingleTickerProviderStateMixin
               });
             }
           },
-          child: Container(
-            margin: EdgeInsets.only(bottom: _distanciaEntreCards),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(_raioBordaCard),
-              border: Border.all(color: paleta.borda, width: 2.0),
-            ),
-            child: ClipRRect(
-              borderRadius: avisoEspecial.isNotEmpty 
-                  ? BorderRadius.only(bottomLeft: Radius.circular(_raioBordaCard - 2.0), bottomRight: Radius.circular(_raioBordaCard - 2.0)) 
-                  : BorderRadius.circular(_raioBordaCard - 2.0),
-              child: Stack(
-                children: [
-                  Positioned.fill(child: Container(decoration: BoxDecoration(gradient: gradienteDinamico))),
-                  
-                  Positioned.fill(
-                    child: AnimatedOpacity(
-                      opacity: isExpanded ? 1.0 : 0.0,
-                      duration: Duration(milliseconds: isExpanded ? 300 : 100), 
-                      curve: isExpanded ? Curves.easeInExpo : Curves.easeOut,
-                      child: AnimatedBuilder(
-                        animation: _gridAnimController,
-                        builder: (context, child) {
-                          return CustomPaint(
-                            painter: _GridPainter(
-                              progress: _gridAnimController.value,
-                              color: _corLinhasGrade.withOpacity(_opacidadeLinhasGrade),
-                              vLines: _linhasVerticaisGrade,
-                            ),
-                          );
-                        },
+          // 🟢 A MÁGICA FLUIDA: O Hero abraça o Material e ele voa perfeitamente
+          child: Hero(
+            tag: 'hero_card_$_myCardId',
+            flightShuttleBuilder: (flightContext, animation, flightDirection, fromHeroContext, toHeroContext) {
+              return Material(type: MaterialType.transparency, child: toHeroContext.widget);
+            },
+            child: Material(
+              type: MaterialType.transparency,
+              child: Container(
+                margin: EdgeInsets.only(bottom: _distanciaEntreCards),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(_raioBordaCard),
+                  border: Border.all(color: paleta.borda, width: 2.0),
+                ),
+                child: ClipRRect(
+                  borderRadius: avisoEspecial.isNotEmpty 
+                      ? BorderRadius.only(bottomLeft: Radius.circular(_raioBordaCard - 2.0), bottomRight: Radius.circular(_raioBordaCard - 2.0)) 
+                      : BorderRadius.circular(_raioBordaCard - 2.0),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: Container(decoration: BoxDecoration(gradient: gradienteDinamico))),
+                      
+                      Positioned.fill(
+                        child: AnimatedOpacity(
+                          opacity: isExpanded ? 1.0 : 0.0,
+                          duration: Duration(milliseconds: isExpanded ? 300 : 100), 
+                          curve: isExpanded ? Curves.easeInExpo : Curves.easeOut,
+                          child: AnimatedBuilder(
+                            animation: _gridAnimController,
+                            builder: (context, child) {
+                              return CustomPaint(
+                                painter: _GridPainter(
+                                  progress: _gridAnimController.value,
+                                  color: _corLinhasGrade.withOpacity(_opacidadeLinhasGrade),
+                                  vLines: _linhasVerticaisGrade,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
 
-                  Positioned.fill(
-                    child: AnimatedOpacity(
-                      opacity: isExpanded ? 1.0 : 0.0,
-                      duration: Duration(milliseconds: isExpanded ? 300 : 100),
-                      child: Stack(
+                      Positioned.fill(
+                        child: AnimatedOpacity(
+                          opacity: isExpanded ? 1.0 : 0.0,
+                          duration: Duration(milliseconds: isExpanded ? 300 : 100),
+                          child: Stack(
+                            children: [
+                              Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [paleta.fundoInicio, paleta.fundoInicio.withOpacity(0.0)]))),
+                              Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [paleta.fundoFim, paleta.fundoFim.withOpacity(0.0)]))),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [paleta.fundoInicio, paleta.fundoInicio.withOpacity(0.0)]))),
-                          Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [paleta.fundoFim, paleta.fundoFim.withOpacity(0.0)]))),
+                          if (avisoEspecial.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                              decoration: const BoxDecoration(color: Colors.white),
+                              child: Text(avisoEspecial, style: const TextStyle(fontFamily: 'Aristotelica', fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF9FA3AD))),
+                            ),
+                          
+                          Padding(
+                            padding: EdgeInsets.only(left: _paddingLateralInterno, right: _paddingLateralInterno, top: _paddingTopCard, bottom: _paddingBottomCard),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IntrinsicHeight(
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch, 
+                                    children: [
+                                      _buildHorarioColumn(horarioAtual),
+                                      SizedBox(width: _espacoHorarioETextos),
+                                      
+                                      Expanded(
+                                        child: SingleChildScrollView( 
+                                          physics: const NeverScrollableScrollPhysics(),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Padding(
+                                                padding: EdgeInsets.only(right: isExpanded ? (_tamanhoIconesSeta * 2 + _distanciaEntreBotoes + 10) : 0),
+                                                child: _buildInfoColumnFixed(horarioAtual, turmaAtual),
+                                              ),
+                                              
+                                              AnimatedSize(
+                                                duration: const Duration(milliseconds: 300),
+                                                curve: Curves.fastOutSlowIn,
+                                                alignment: Alignment.topCenter,
+                                                clipBehavior: Clip.hardEdge, 
+                                                child: isExpanded 
+                                                    ? _buildExpandedLatos(turmaAtual)
+                                                    : const SizedBox(width: double.infinity, height: 0),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                
+                                AnimatedSize(
+                                  duration: const Duration(milliseconds: 400), 
+                                  curve: Curves.easeInOutCubic, 
+                                  alignment: Alignment.topCenter,
+                                  clipBehavior: Clip.hardEdge, 
+                                  child: AnimatedOpacity(
+                                    duration: const Duration(milliseconds: 200),
+                                    opacity: (!mostrarBotoes && !isExpanded) || (_acaoConcluida && !isExpanded) ? 0.0 : 1.0,
+                                    child: Builder(
+                                      builder: (context) {
+                                        if (mostrarBotoes && !_acaoConcluida && !isExpanded) {
+                                          return Column(
+                                            children: [
+                                              const SizedBox(height: 12),
+                                              Divider(color: Colors.white.withOpacity(0.8), height: 1, thickness: 1.5),
+                                              const SizedBox(height: 12),
+                                              _buildBotoesPresencaOnly(dataFormatadaStr, paleta, gradienteDinamico),
+                                            ],
+                                          );
+                                        } else if (mostrarBotoes && !_acaoConcluida && isExpanded) {
+                                          return Column(
+                                            children: [
+                                              const SizedBox(height: 12),
+                                              Divider(color: Colors.white.withOpacity(0.8), height: 1, thickness: 1.5),
+                                              const SizedBox(height: 12),
+                                              SizedBox(
+                                                height: 75, 
+                                                child: LayoutBuilder(
+                                                  builder: (context, constraints) {
+                                                    return OverflowBox(
+                                                      maxWidth: constraints.maxWidth + 20, 
+                                                      child: PageView(
+                                                        controller: _pageController,
+                                                        onPageChanged: (idx) => setState(() => _currentPage = idx),
+                                                        children: [
+                                                          Padding(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                                                            child: _buildBotoesPresencaOnly(dataFormatadaStr, paleta, gradienteDinamico),
+                                                          ),
+                                                          Padding(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                                                            child: _buildSecaoFrequenciaOnly(turmaAtual, progresso),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    );
+                                                  }
+                                                )
+                                              ),
+                                              const SizedBox(height: 12),
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [_buildDot(0), const SizedBox(width: 6), _buildDot(1)],
+                                              ),
+                                            ],
+                                          );
+                                        } else if (isExpanded) {
+                                          return Column(
+                                            children: [
+                                              const SizedBox(height: 12),
+                                              Divider(color: Colors.white.withOpacity(0.8), height: 1, thickness: 1.5),
+                                              const SizedBox(height: 12),
+                                              _buildSecaoFrequenciaOnly(turmaAtual, progresso),
+                                            ],
+                                          );
+                                        } else {
+                                          return const SizedBox(width: double.infinity, height: 0);
+                                        }
+                                      }
+                                    )
+                                  )
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ),
 
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (avisoEspecial.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                          decoration: const BoxDecoration(color: Colors.white),
-                          child: Text(avisoEspecial, style: const TextStyle(fontFamily: 'Aristotelica', fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF9FA3AD))),
-                        ),
-                      
-                      Padding(
-                        padding: EdgeInsets.only(left: _paddingLateralInterno, right: _paddingLateralInterno, top: _paddingTopCard, bottom: _paddingBottomCard),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IntrinsicHeight(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch, 
-                                children: [
-                                  _buildHorarioColumn(horarioAtual),
-                                  SizedBox(width: _espacoHorarioETextos),
-                                  
-                                  Expanded(
-                                    child: SingleChildScrollView( 
-                                      physics: const NeverScrollableScrollPhysics(),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Padding(
-                                            padding: EdgeInsets.only(right: isExpanded ? (_tamanhoIconesSeta * 2 + _distanciaEntreBotoes + 10) : 0),
-                                            child: _buildInfoColumnFixed(horarioAtual, turmaAtual),
-                                          ),
-                                          
-                                          AnimatedSize(
-                                            duration: const Duration(milliseconds: 300),
-                                            curve: Curves.fastOutSlowIn,
-                                            alignment: Alignment.topCenter,
-                                            clipBehavior: Clip.hardEdge, 
-                                            child: isExpanded 
-                                                ? _buildExpandedLatos(turmaAtual)
-                                                : const SizedBox(width: double.infinity, height: 0),
-                                          ),
-                                        ],
-                                      ),
-                                    )
+                      Positioned(
+                        top: avisoEspecial.isNotEmpty ? _distanciaBotoesTopo + 30 : _distanciaBotoesTopo,
+                        right: _distanciaBotoesDireita,
+                        child: IgnorePointer(
+                          ignoring: !isExpanded,
+                          child: AnimatedOpacity(
+                            opacity: isExpanded ? 1.0 : 0.0,
+                            duration: Duration(milliseconds: isExpanded ? 300 : 100),
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () => globalExpandedCardId.value = null,
+                                  child: Transform.rotate(
+                                    angle: _grausRotacaoRecolher * math.pi / 180,
+                                    child: Image.asset('assets/images/setabranca_icon.png', width: _tamanhoIconesSeta, height: _tamanhoIconesSeta),
                                   ),
-                                ],
-                              ),
+                                ),
+                                SizedBox(width: _distanciaEntreBotoes),
+                                GestureDetector(
+                                  // 🟢 A CHAVE DO POPUP! Ao clicar, expande em tela cheia usando a mesma Tag do Card
+                                  onTap: () => DisciplinaDetailsPage.abrir(context, widget.disciplina, 'hero_card_$_myCardId'),
+                                  child: Transform.rotate(
+                                    angle: _grausRotacaoNavegar * math.pi / 180,
+                                    child: Image.asset('assets/images/setabranca_icon.png', width: _tamanhoIconesSeta, height: _tamanhoIconesSeta),
+                                  ),
+                                ),
+                              ],
                             ),
-                            
-                            AnimatedSize(
-                              duration: const Duration(milliseconds: 400), 
-                              curve: Curves.easeInOutCubic, 
-                              alignment: Alignment.topCenter,
-                              clipBehavior: Clip.hardEdge, 
-                              child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 200),
-                                opacity: (!mostrarBotoes && !isExpanded) || (_acaoConcluida && !isExpanded) ? 0.0 : 1.0,
-                                child: Builder(
-                                  builder: (context) {
-                                    if (mostrarBotoes && !_acaoConcluida && !isExpanded) {
-                                      return Column(
-                                        children: [
-                                          const SizedBox(height: 12),
-                                          Divider(color: Colors.white.withOpacity(0.8), height: 1, thickness: 1.5),
-                                          const SizedBox(height: 12),
-                                          _buildBotoesPresencaOnly(dataFormatadaStr, paleta, gradienteDinamico),
-                                        ],
-                                      );
-                                    } else if (mostrarBotoes && !_acaoConcluida && isExpanded) {
-                                      return Column(
-                                        children: [
-                                          const SizedBox(height: 12),
-                                          Divider(color: Colors.white.withOpacity(0.8), height: 1, thickness: 1.5),
-                                          const SizedBox(height: 12),
-                                          SizedBox(
-                                            height: 75, 
-                                            child: LayoutBuilder(
-                                              builder: (context, constraints) {
-                                                return OverflowBox(
-                                                  maxWidth: constraints.maxWidth + 20, 
-                                                  child: PageView(
-                                                    controller: _pageController,
-                                                    onPageChanged: (idx) => setState(() => _currentPage = idx),
-                                                    children: [
-                                                      Padding(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                                                        child: _buildBotoesPresencaOnly(dataFormatadaStr, paleta, gradienteDinamico),
-                                                      ),
-                                                      Padding(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                                                        child: _buildSecaoFrequenciaOnly(turmaAtual, progresso),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              }
-                                            )
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [_buildDot(0), const SizedBox(width: 6), _buildDot(1)],
-                                          ),
-                                        ],
-                                      );
-                                    } else if (isExpanded) {
-                                      return Column(
-                                        children: [
-                                          const SizedBox(height: 12),
-                                          Divider(color: Colors.white.withOpacity(0.8), height: 1, thickness: 1.5),
-                                          const SizedBox(height: 12),
-                                          _buildSecaoFrequenciaOnly(turmaAtual, progresso),
-                                        ],
-                                      );
-                                    } else {
-                                      return const SizedBox(width: double.infinity, height: 0);
-                                    }
-                                  }
-                                )
-                              )
-                            ),
-                          ],
+                          ),
                         ),
                       ),
+
                     ],
                   ),
-
-                  Positioned(
-                    top: avisoEspecial.isNotEmpty ? _distanciaBotoesTopo + 30 : _distanciaBotoesTopo,
-                    right: _distanciaBotoesDireita,
-                    child: IgnorePointer(
-                      ignoring: !isExpanded,
-                      child: AnimatedOpacity(
-                        opacity: isExpanded ? 1.0 : 0.0,
-                        duration: Duration(milliseconds: isExpanded ? 300 : 100),
-                        child: Row(
-                          children: [
-                            GestureDetector(
-                              onTap: () => globalExpandedCardId.value = null,
-                              child: Transform.rotate(
-                                angle: _grausRotacaoRecolher * math.pi / 180,
-                                child: Image.asset('assets/images/setabranca_icon.png', width: _tamanhoIconesSeta, height: _tamanhoIconesSeta),
-                              ),
-                            ),
-                            SizedBox(width: _distanciaEntreBotoes),
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => DisciplinaDetailsPage(disciplina: widget.disciplina))),
-                              child: Transform.rotate(
-                                angle: _grausRotacaoNavegar * math.pi / 180,
-                                child: Image.asset('assets/images/setabranca_icon.png', width: _tamanhoIconesSeta, height: _tamanhoIconesSeta),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                ],
+                ),
               ),
             ),
           ),
