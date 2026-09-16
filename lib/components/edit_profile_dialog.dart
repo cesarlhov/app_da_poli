@@ -63,7 +63,7 @@ class _EditProfileDialogState extends State<EditProfileDialog> {
           children: [
             TextFormField(
               controller: _nomeController,
-              decoration: const InputDecoration(labelText: 'Nome Completo'),
+              decoration: const InputDecoration(labelText: 'Nome Completo DO Caraio'),
               validator: (value) => value!.isEmpty ? 'Campo obrigatório' : null,
             ),
             const SizedBox(height: 16),
