@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "652592245254",
-    "project_id": "project-gp-12b38",
-    "storage_bucket": "project-gp-12b38.firebasestorage.app"
+    "project_number": "282593100352",
+    "project_id": "app-da-poli-v2",
+    "storage_bucket": "app-da-poli-v2.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:652592245254:android:ca3f96a5237fe7c9bd7187",
+        "mobilesdk_app_id": "1:282593100352:android:8d5f12a3067a984f5cd5a5",
         "android_client_info": {
           "package_name": "com.example.app_da_poli"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyA5obxpq0nAO7WAGSJYrMdKEAQHx5eGax0"
+          "current_key": "AIzaSyCrgb1MfbeVSX88p7huqAa8Y3VjjuESVq0"
         }
       ],
       "services": {

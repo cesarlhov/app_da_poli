@@ -43,7 +43,7 @@ class AuthService {
       }
       return cred;
     } on FirebaseAuthException catch (e) {
-      String erro = 'Ocorreu um erro no cadastro.';
+      String erro = 'Ocorreu um erro no cadastro: ${e.code}';
       if (e.code == 'weak-password') {
         erro = 'A senha fornecida é muito fraca.';
       } else if (e.code == 'email-already-in-use') {
