@@ -358,7 +358,7 @@ class _DisciplinaDetailsPageState extends State<DisciplinaDetailsPage> {
       
       // 🟢 MÁGICA: Só mostra o "Calouro Curioso" se a pessoa não for Grêmio nem RC!
       if (user.tituloAtual.isNotEmpty) {
-        if (user.tituloAtual != 'Calouro Curioso' || titulos.isEmpty) {
+        if (user.tituloAtual != 'Calouro Curioso!' || titulos.isEmpty) {
           titulos.add(user.tituloAtual.toUpperCase());
         }
       }
